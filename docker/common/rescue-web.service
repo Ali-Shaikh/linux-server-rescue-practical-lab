@@ -7,6 +7,7 @@ Type=simple
 User=rescue
 Group=rescue
 Environment=APP_PORT=8080
+Environment=APP_DATA_DIR=/var/lib/rescue-web
 ExecStart=/usr/bin/python3 /opt/rescue-web/server.py
 Restart=on-failure
 RestartSec=2s

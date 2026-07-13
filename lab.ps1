@@ -91,6 +91,7 @@ function Resolve-Drill {
 
     switch ($Name) {
         { $_ -in @("01", "service-failure", "01-service-failure") } { return "01-service-failure" }
+        { $_ -in @("02", "full-filesystem", "02-full-filesystem") } { return "02-full-filesystem" }
         default { throw "Unknown drill '$Name'. Run .\lab.ps1 drills to see the available incidents." }
     }
 }
@@ -185,6 +186,30 @@ function Show-Status {
     }
 }
 
+function Wait-LabReady {
+    for ($attempt = 0; $attempt -lt 90; $attempt++) {
+        if (Test-ContainerRunning) {
+            $active = & docker exec $ContainerName sh -c 'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true' 2>$null
+            $health = & docker container inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' $ContainerName 2>$null
+
+            if (-not $active -and $health -eq "healthy") {
+                return
+            }
+
+            if ($active) {
+                $systemState = & docker exec $ContainerName systemctl is-system-running 2>$null
+                if ($systemState -in @("running", "degraded")) {
+                    return
+                }
+            }
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") ps
+    throw "The lab did not reach a ready or diagnosable incident state."
+}
+
 function Start-Lab {
     param([string]$RequestedDistro)
 
@@ -199,8 +224,9 @@ function Start-Lab {
     Set-DistroContext $requested
     if ((Invoke-Doctor) -ne 0) { throw "Doctor found blocking problems." }
     Write-Host "`nBuilding and starting $(Get-DistroDisplay $script:LabDistro)..."
-    & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") up --build --detach --wait
-    if ($LASTEXITCODE -ne 0) { throw "Docker Compose could not start a healthy lab." }
+    & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") up --build --detach
+    if ($LASTEXITCODE -ne 0) { throw "Docker Compose could not start the lab." }
+    Wait-LabReady
     Save-SelectedDistro
     Show-Status
 }
@@ -290,7 +316,10 @@ try {
         "check" { Invoke-Check $argument }
         "break" { Invoke-Break $argument }
         "verify" { Invoke-Verify $argument }
-        "drills" { Write-Host "01  service-failure  Beginner  Diagnose a service trapped in a restart loop." }
+        "drills" {
+            Write-Host "01  service-failure  Beginner  Diagnose a service trapped in a restart loop."
+            Write-Host "02  full-filesystem  Beginner  Recover an application filesystem with no free space."
+        }
         "distros" { Show-Distributions }
         { $_ -in @("shell", "ssh") } {
             Assert-Running

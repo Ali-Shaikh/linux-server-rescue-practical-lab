@@ -3,16 +3,16 @@
 Diagnose and repair realistic Linux incidents on disposable servers you are
 allowed to break.
 
-> **Early build:** version 0.1.0-alpha.2 establishes the lab contract and ships one
-> complete failed-service incident. The wider curriculum is planned in
+> **Early build:** version 0.1.0-alpha.3 establishes the lab contract and ships two
+> complete rescue incidents. The wider curriculum is planned in
 > [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
 
 ## What works today
 
 - A selectable real systemd host called `relay`: Ubuntu, Debian or Rocky Linux.
 - The same lifecycle commands in Bash and PowerShell.
-- A complete service-failure drill with ordered hints, self-verification and a
-  spoiler-fenced solution.
+- Complete service-failure and full-filesystem drills with ordered hints,
+  self-verification and spoiler-fenced solutions.
 - Loopback-only access to the sample service at <http://127.0.0.1:8100>.
 - Idempotent drill state that refuses to stack incidents.
 
@@ -59,6 +59,13 @@ Open [`drills/01-service-failure.md`](drills/01-service-failure.md) for the
 incident ticket. When you believe the server is repaired, leave the shell and
 run `./lab verify 01` or `.\lab.ps1 verify 01`.
 
+## Available incidents
+
+| Number | Incident | Capability |
+|---|---|---|
+| `01` | [Service failure](drills/01-service-failure.md) | Diagnose a systemd service trapped in a restart loop. |
+| `02` | [Full filesystem](drills/02-full-filesystem.md) | Find and recover the application filesystem that has no free space. |
+
 ## Command contract
 
 | Command | Purpose |
@@ -90,9 +97,14 @@ Compose project. Inspect [`compose.yaml`](compose.yaml) before running it, and
 do not run an untrusted fork.
 
 `down` keeps the small drill-state volume so a stopped session can resume.
-`reset` removes that volume and returns the lab to a clean, healthy state.
+The saved fault is restored when that distribution starts again. `reset`
+removes the state volume and returns the lab to a clean, healthy state.
 Each distribution has a separate state volume. Run `down` before changing
 targets, then start the next one with `up <distribution>`.
+
+Incident 02 mounts a size-limited 16 MiB tmpfs inside the container. It does
+not fill or mount the host filesystem. The tmpfs uses at most 16 MiB of the
+Docker host's memory or swap and disappears with the container.
 
 ## Capability boundary
 

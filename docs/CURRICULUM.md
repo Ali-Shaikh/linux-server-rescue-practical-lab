@@ -1,6 +1,6 @@
 # Linux Server Rescue curriculum
 
-Status: first vertical slice in build, 2026-07-13.
+Status: first two vertical slices in build, 2026-07-13.
 
 ## Learning promise
 
@@ -30,7 +30,7 @@ arm64 and resource acceptance checks.
 | Stage | Capability | Candidate incidents | Backend | Status |
 |---|---|---|---|---|
 | 1 | Services and logs | Bad systemd override, restart loop, stale dependency | Docker | First incident implemented |
-| 2 | Capacity | Full filesystem, deleted-open file, exhausted inodes | Docker | Planned |
+| 2 | Capacity | Full filesystem, deleted-open file, exhausted inodes | Docker | Full-filesystem incident implemented |
 | 3 | Identity and access | Wrong ownership, broken sudo rule, locked service account | Docker | Planned |
 | 4 | Networking and DNS | Wrong listener, bad resolver, shadowed hosts entry | Docker | Planned |
 | 5 | Processes and performance | Runaway process, memory pressure, file descriptor exhaustion | Docker | Planned |

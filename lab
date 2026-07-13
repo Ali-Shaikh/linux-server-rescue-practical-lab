@@ -92,6 +92,7 @@ require_running() {
 normalise_drill() {
   case "${1:-}" in
     01|service-failure|01-service-failure) printf '01-service-failure' ;;
+    02|full-filesystem|02-full-filesystem) printf '02-full-filesystem' ;;
     *) fail "Unknown drill '${1:-}'. Run lab drills to see the available incidents." ;;
   esac
 }
@@ -171,6 +172,34 @@ doctor() {
   printf '\nDoctor found no blocking problems.\n'
 }
 
+wait_for_lab_ready() {
+  local active health system_state
+
+  for _ in {1..90}; do
+    if container_running; then
+      active="$(docker_exec "${container_name}" sh -c \
+        'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true' 2>/dev/null || true)"
+      health="$(docker container inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' \
+        "${container_name}" 2>/dev/null || true)"
+
+      if [[ -z "${active}" && "${health}" == "healthy" ]]; then
+        return 0
+      fi
+
+      if [[ -n "${active}" ]]; then
+        system_state="$(docker_exec "${container_name}" systemctl is-system-running 2>/dev/null || true)"
+        if [[ "${system_state}" == "running" || "${system_state}" == "degraded" ]]; then
+          return 0
+        fi
+      fi
+    fi
+    sleep 1
+  done
+
+  compose ps
+  fail "The lab did not reach a ready or diagnosable incident state."
+}
+
 up() {
   local requested actual
   requested="$(normalise_distro "${1:-${lab_distro}}")"
@@ -185,7 +214,8 @@ up() {
   set_distro_context "${requested}"
   doctor
   printf '\nBuilding and starting %s...\n' "$(distro_display "${lab_distro}")"
-  compose up --build --detach --wait
+  compose up --build --detach
+  wait_for_lab_ready
   save_selected_distro
   status
 }
@@ -256,6 +286,7 @@ run_check() {
 
 drills() {
   printf '01  service-failure  Beginner  Diagnose a service trapped in a restart loop.\n'
+  printf '02  full-filesystem  Beginner  Recover an application filesystem with no free space.\n'
 }
 
 distros() {

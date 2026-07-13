@@ -31,5 +31,5 @@ jobs:
         distro: [ubuntu, debian, rocky]
     steps:
       - uses: actions/checkout@v4
-      - name: Run complete incident loop on ${{ matrix.distro }}
+      - name: Run complete incident suite on ${{ matrix.distro }}
         run: bash ./tests/smoke.sh "${{ matrix.distro }}"

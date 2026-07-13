@@ -1,0 +1,12 @@
+[Unit]
+Description=Prepare the rescue-web application data volume
+After=local-fs.target
+Before=rescue-web.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/lab/drills/fixtures/02-full-filesystem.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

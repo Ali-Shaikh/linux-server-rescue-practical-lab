@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly active_file="/var/lib/cloudsprocket-lab/active-drill"
+readonly override_dir="/etc/systemd/system/rescue-web.service.d"
+
+restore_service_failure() {
+  mkdir -p "${override_dir}"
+  cat > "${override_dir}/override.conf" <<'EOF'
+[Service]
+Environment=APP_PORT=not-a-port
+EOF
+}
+
+restore_full_filesystem() {
+  systemctl enable rescue-data-volume.service >/dev/null
+}
+
+if [[ -f "${active_file}" ]]; then
+  active_drill="$(<"${active_file}")"
+  case "${active_drill}" in
+    01-service-failure) restore_service_failure ;;
+    02-full-filesystem) restore_full_filesystem ;;
+    *) printf 'WARN: unknown saved drill %s was not restored.\n' "${active_drill}" >&2 ;;
+  esac
+fi
+
+exec /sbin/init

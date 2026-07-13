@@ -4,6 +4,7 @@
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -32,6 +33,12 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     port = int(os.environ.get("APP_PORT", "8080"))
+    data_dir = Path(os.environ.get("APP_DATA_DIR", "/var/lib/rescue-web"))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "last-startup").write_text(
+        f"pid={os.getpid()}\n",
+        encoding="utf-8",
+    )
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"rescue-web listening on port {port}", flush=True)
     server.serve_forever()
