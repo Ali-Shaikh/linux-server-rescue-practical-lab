@@ -21,12 +21,32 @@ restore_dns_ghost() {
   systemctl enable rescue-upstream-check.service >/dev/null
 }
 
+restore_permission_denied() {
+  /opt/lab/drills/fixtures/04-permission-denied.sh
+}
+
+restore_runaway_process() {
+  systemctl enable rescue-cpu-hog.service >/dev/null
+}
+
+restore_invalid_configuration() {
+  /opt/lab/drills/fixtures/06-invalid-configuration.sh
+}
+
+restore_wrong_listener() {
+  /opt/lab/drills/fixtures/07-wrong-listener.sh
+}
+
 if [[ -f "${active_file}" ]]; then
   active_drill="$(<"${active_file}")"
   case "${active_drill}" in
     01-service-failure) restore_service_failure ;;
     02-full-filesystem) restore_full_filesystem ;;
     03-dns-ghost) restore_dns_ghost ;;
+    04-permission-denied) restore_permission_denied ;;
+    05-runaway-process) restore_runaway_process ;;
+    06-invalid-configuration) restore_invalid_configuration ;;
+    07-wrong-listener) restore_wrong_listener ;;
     *) printf 'WARN: unknown saved drill %s was not restored.\n' "${active_drill}" >&2 ;;
   esac
 fi

@@ -14,8 +14,13 @@ jobs:
       - uses: actions/checkout@v6
       - name: Validate shell scripts
         run: |
-          bash -n lab
+          bash -n lab docker/common/configure-image.sh docker/common/init-lab
+          bash -n docker/common/rescue-upstream-check docker/common/rescue-cpu-hog
           find .devcontainer checks drills tests -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+      - name: Validate application configuration
+        run: |
+          python3 -m py_compile docker/common/rescue-web.py
+          python3 -m json.tool docker/common/rescue-web-config.json >/dev/null
       - name: Validate PowerShell syntax
         shell: pwsh
         run: |

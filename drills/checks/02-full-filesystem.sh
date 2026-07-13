@@ -20,7 +20,16 @@ if ! systemctl is-active --quiet rescue-web.service; then
   exit 1
 fi
 
-if ! curl --fail --silent http://127.0.0.1:8080/health >/dev/null; then
+health_ready=0
+for _ in {1..20}; do
+  if curl --fail --silent http://127.0.0.1:8080/health >/dev/null 2>&1; then
+    health_ready=1
+    break
+  fi
+  sleep 0.25
+done
+
+if (( health_ready == 0 )); then
   printf 'NOT FIXED: systemd reports active, but the health endpoint does not answer.\n' >&2
   exit 1
 fi

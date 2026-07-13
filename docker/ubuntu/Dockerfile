@@ -8,13 +8,17 @@ ENV container=docker \
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         bash ca-certificates curl dbus dnsutils iproute2 iputils-ping less \
-        nano procps python3 sudo systemd systemd-sysv \
+        nano procps python3 sudo systemd systemd-sysv util-linux \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 COPY docker/common/rescue-web.py /opt/rescue-web/server.py
 COPY docker/common/rescue-web.service /etc/systemd/system/rescue-web.service
+COPY docker/common/rescue-web-config.json /etc/rescue-web/config.json
+COPY docker/common/rescue-web-config.json /etc/rescue-web/config.json.last-known-good
 COPY docker/common/rescue-data-volume.service /etc/systemd/system/rescue-data-volume.service
+COPY docker/common/rescue-cpu-hog /usr/local/bin/rescue-cpu-hog
+COPY docker/common/rescue-cpu-hog.service /etc/systemd/system/rescue-cpu-hog.service
 COPY docker/common/rescue-upstream-check /usr/local/bin/rescue-upstream-check
 COPY docker/common/rescue-upstream-check.service /etc/systemd/system/rescue-upstream-check.service
 COPY docker/common/init-lab /usr/local/sbin/init-lab
