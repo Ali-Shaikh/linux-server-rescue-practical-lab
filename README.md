@@ -1,9 +1,11 @@
 # Linux Server Rescue Practical Lab
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Ali-Shaikh/linux-server-rescue-practical-lab?quickstart=1)
+
 Diagnose and repair realistic Linux incidents on disposable servers you are
 allowed to break.
 
-> **Early build:** version 0.1.0-alpha.3 establishes the lab contract and ships two
+> **Early build:** version 0.1.0-alpha.4 establishes the lab contract and ships two
 > complete rescue incidents. The wider curriculum is planned in
 > [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
 
@@ -15,11 +17,9 @@ allowed to break.
   self-verification and spoiler-fenced solutions.
 - Loopback-only access to the sample service at <http://127.0.0.1:8100>.
 - Idempotent drill state that refuses to stack incidents.
+- A one-click Codespaces environment with a dedicated Docker daemon.
 
 ## Quick start
-
-You need Git, Docker Engine or Docker Desktop, Docker Compose 2.20 or later,
-and about 3 GB of free disk space.
 
 Choose one distribution at a time:
 
@@ -33,7 +33,31 @@ The Rocky major-version image receives rolling updates and currently resolves
 to Rocky Linux 10.2. Run `./lab distros` or `.\lab.ps1 distros` to see the
 matrix without starting Docker.
 
+### GitHub Codespaces
+
+Select the **Open in GitHub Codespaces** badge above. The configuration requests
+at least 2 CPU cores, 8 GB of memory and 32 GB of storage. It creates a
+dedicated Docker-in-Docker daemon, keeps forwarded port 8100 private, and does
+not start or download a lab image until you choose a distribution.
+
+When the terminal is ready:
+
+```bash
+./lab up ubuntu
+./lab break 01
+./lab shell
+```
+
+In the browser editor, open **Ports** and select **Rescue web service** to reach
+the forwarded application. Codespaces can consume included usage or incur
+compute and storage charges. Stop it when pausing and delete it when finished.
+See the [Codespaces guide](docs/CODESPACES.md) for lifecycle, cost and security
+details.
+
 ### macOS and Linux
+
+You need Git, Docker Engine or Docker Desktop, Docker Compose 2.20 or later,
+and about 3 GB of free disk space.
 
 ```bash
 git clone https://github.com/Ali-Shaikh/linux-server-rescue-practical-lab.git
@@ -95,6 +119,12 @@ or the host filesystem. It publishes its only port on `127.0.0.1`, labels its
 resources `cloudsprocket.lab=rescue`, and its wrappers act only on the `lsr`
 Compose project. Inspect [`compose.yaml`](compose.yaml) before running it, and
 do not run an untrusted fork.
+
+Codespaces uses a privileged Docker-in-Docker development container and then
+runs the same privileged systemd lab inside its dedicated daemon. It does not
+mount an external Docker socket. The codespace is still disposable rather than
+a security boundary; inspect [its configuration](.devcontainer/devcontainer.json)
+before launching an untrusted branch.
 
 `down` keeps the small drill-state volume so a stopped session can resume.
 The saved fault is restored when that distribution starts again. `reset`

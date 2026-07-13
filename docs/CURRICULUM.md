@@ -60,8 +60,9 @@ Version 0.1 should contain three complete incidents:
   the expected DNS answer.
 
 Release acceptance requires both wrappers, the full incident loop on every
-supported distribution, amd64 and arm64 image builds, restart resilience, a
-2-core and 8 GB resource run, and an honest Codespaces quick start.
+supported distribution, amd64 and arm64 image builds, restart resilience, and
+a 2-core and 8 GB resource run. The honest Codespaces quick start is now
+implemented and remains part of the release regression suite.
 
 ## Deliberate exclusions
 
