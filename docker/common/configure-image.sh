@@ -7,6 +7,7 @@ fi
 
 install -d -m 0755 /etc/sudoers.d /var/lib/cloudsprocket-lab
 install -d -o rescue -g rescue -m 0750 /var/lib/rescue-web
+# Unrestricted sudo is intentional: learners need root in this disposable lab host.
 printf 'rescue ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/rescue
 chmod 0440 /etc/sudoers.d/rescue
 chmod 0755 /opt/rescue-web/server.py

@@ -11,6 +11,11 @@ uses an Ubuntu 24.04 development image and the Dev Container maintainers'
 Docker-in-Docker feature. It requests at least 2 CPU cores, 8 GB of memory and
 32 GB of storage.
 
+The feature reference is pinned to major version 4. Its `version` option is
+separate and selects the Docker or Moby Engine installed inside the dev
+container; `latest` keeps that engine on the feature's supported current
+release.
+
 Docker-in-Docker provides a dedicated Docker daemon inside the development
 container. The repository does not mount a host Docker socket, home directory,
 SSH keys or host filesystem into the lab. Port 8100 is forwarded privately and

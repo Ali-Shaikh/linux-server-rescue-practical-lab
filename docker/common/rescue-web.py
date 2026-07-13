@@ -39,6 +39,7 @@ def main() -> None:
         f"pid={os.getpid()}\n",
         encoding="utf-8",
     )
+    # Docker publishes this container listener only on the host loopback address.
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"rescue-web listening on port {port}", flush=True)
     server.serve_forever()

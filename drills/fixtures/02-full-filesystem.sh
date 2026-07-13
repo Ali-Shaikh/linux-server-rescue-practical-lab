@@ -22,7 +22,12 @@ else
 fi
 
 rm -f "${filler}" "${data_dir}/last-startup"
-if dd if=/dev/zero of="${filler}" bs=1M count=32 status=none 2>/dev/null; then
+set +e
+dd_error="$(dd if=/dev/zero of="${filler}" bs=1M count=32 status=none 2>&1)"
+dd_status=$?
+set -e
+
+if (( dd_status == 0 )); then
   printf 'The bounded data volume unexpectedly accepted more than 16 MiB.\n' >&2
   rm -f "${filler}"
   exit 1
@@ -32,5 +37,6 @@ used_percent="$(df -P "${data_dir}" | awk 'NR == 2 {print $5}')"
 if [[ "${used_percent}" != "100%" ]]; then
   printf 'The data volume reached %s rather than the expected 100%%.\n' \
     "${used_percent:-an unknown utilisation}" >&2
+  [[ -z "${dd_error}" ]] || printf 'dd reported: %s\n' "${dd_error}" >&2
   exit 1
 fi

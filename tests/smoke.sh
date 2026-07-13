@@ -45,6 +45,9 @@ actual_distro="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay sh -c '. /etc/os-relea
 expect_no_active_drill 01
 bash ./lab break 01
 expect_broken 01
+# Applying an already-active incident must preserve the broken state.
+bash ./lab break 01
+expect_broken 01
 
 bash ./lab down
 bash ./lab up "${distro}"
@@ -57,13 +60,14 @@ MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
   "printf '[Service]\\nEnvironment=APP_PORT=8080\\n' > /etc/systemd/system/rescue-web.service.d/override.conf && systemctl daemon-reload && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
 
 bash ./lab verify 01
-bash ./lab break 01
-bash ./lab verify 01
 
 bash ./lab reset
 expect_no_active_drill 01
 expect_no_active_drill 02
 
+bash ./lab break 02
+expect_broken 02
+# Applying an already-active incident must preserve the broken state.
 bash ./lab break 02
 expect_broken 02
 
@@ -83,8 +87,6 @@ expect_broken 02
 MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
   "rm -f /var/lib/rescue-web/old-debug.log && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
 
-bash ./lab verify 02
-bash ./lab break 02
 bash ./lab verify 02
 
 bash ./lab reset
