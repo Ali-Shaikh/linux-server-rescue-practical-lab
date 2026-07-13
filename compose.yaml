@@ -1,0 +1,55 @@
+name: lsr
+
+services:
+  relay:
+    container_name: lsr-relay
+    hostname: relay
+    image: lsr-relay-${LAB_DISTRO:-ubuntu}
+    build:
+      context: .
+      dockerfile: docker/${LAB_DISTRO:-ubuntu}/Dockerfile
+    privileged: true
+    cgroup: host
+    environment:
+      container: docker
+      LAB_DISTRO: ${LAB_DISTRO:-ubuntu}
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    volumes:
+      - type: volume
+        source: state
+        target: /var/lib/cloudsprocket-lab
+    ports:
+      - name: rescue-web
+        target: 8080
+        published: "8100"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        app_protocol: http
+    labels:
+      cloudsprocket.lab: rescue
+      cloudsprocket.role: server
+      cloudsprocket.distro: ${LAB_DISTRO:-ubuntu}
+    healthcheck:
+      test: ["CMD-SHELL", "systemctl is-active --quiet rescue-web.service && curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 10s
+    stop_grace_period: 30s
+
+volumes:
+  state:
+    name: lsr-${LAB_DISTRO:-ubuntu}-state
+    labels:
+      cloudsprocket.lab: rescue
+      cloudsprocket.distro: ${LAB_DISTRO:-ubuntu}
+
+networks:
+  default:
+    name: lsr-${LAB_DISTRO:-ubuntu}-network
+    labels:
+      cloudsprocket.lab: rescue
+      cloudsprocket.distro: ${LAB_DISTRO:-ubuntu}

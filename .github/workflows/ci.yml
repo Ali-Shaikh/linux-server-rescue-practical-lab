@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell scripts
+        run: |
+          bash -n lab
+          find checks drills tests -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $null = [scriptblock]::Create((Get-Content -Raw ./lab.ps1))
+      - name: Validate Compose model
+        run: docker compose --project-name lsr --file compose.yaml config --quiet
+
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [ubuntu, debian, rocky]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run complete incident loop on ${{ matrix.distro }}
+        run: bash ./tests/smoke.sh "${{ matrix.distro }}"
