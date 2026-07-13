@@ -40,6 +40,11 @@ for _ in {1..20}; do
 done
 
 if (( incident_visible == 0 )); then
+  rm -f "${active_file}" "${override_dir}/override.conf"
+  rmdir "${override_dir}" 2>/dev/null || true
+  systemctl daemon-reload
+  systemctl reset-failed rescue-web.service
+  systemctl restart rescue-web.service >/dev/null 2>&1 || true
   printf 'The incident did not take effect. Run lab reset and try again.\n' >&2
   exit 1
 fi
