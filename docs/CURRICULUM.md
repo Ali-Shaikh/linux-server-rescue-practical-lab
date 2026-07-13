@@ -27,6 +27,10 @@ arm64 and resource acceptance checks.
 
 ## Delivery order
 
+Stage numbers describe the capability progression, while incident numbers
+describe implementation and release order. They are intentionally independent,
+so an incident may implement a later curriculum stage first.
+
 | Stage | Capability | Candidate incidents | Backend | Status |
 |---|---|---|---|---|
 | 1 | Services and logs | Bad systemd override, restart loop, stale dependency | Docker | First incident implemented |

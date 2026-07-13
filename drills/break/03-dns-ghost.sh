@@ -14,6 +14,7 @@ clean_fault() {
   awk -v marker="${marker}" 'index($0, marker) == 0' /etc/hosts > "${temporary_file}"
   cat "${temporary_file}" > /etc/hosts
   rm -f "${temporary_file}"
+  systemctl stop rescue-upstream-check.service >/dev/null 2>&1 || true
   systemctl disable rescue-upstream-check.service >/dev/null 2>&1 || true
   systemctl reset-failed rescue-upstream-check.service >/dev/null 2>&1 || true
 }
