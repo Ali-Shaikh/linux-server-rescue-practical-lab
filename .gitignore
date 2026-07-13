@@ -1,0 +1,17 @@
+# Local agent and working files
+.local/
+.claude/
+.codex/
+AGENTS.md
+CLAUDE.md
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Logs and editor state
+*.log
+.DS_Store
+.idea/
+.vscode/

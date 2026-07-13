@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly project_name="lsr"
+readonly container_name="lsr-relay"
+readonly required_compose="2.20.0"
+readonly selected_distro_file="${root_dir}/.local/active-distro"
+
+lab_distro="ubuntu"
+
+compose() {
+  LAB_DISTRO="${lab_distro}" docker compose \
+    --project-name "${project_name}" --file "${root_dir}/compose.yaml" "$@"
+}
+
+docker_exec() {
+  MSYS_NO_PATHCONV=1 docker exec "$@"
+}
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+normalise_distro() {
+  case "${1:-}" in
+    ubuntu) printf 'ubuntu' ;;
+    debian) printf 'debian' ;;
+    rocky) printf 'rocky' ;;
+    *) fail "Unknown distribution '${1:-}'. Run lab distros to see supported targets." ;;
+  esac
+}
+
+distro_display() {
+  case "$1" in
+    ubuntu) printf 'Ubuntu 26.04 LTS' ;;
+    debian) printf 'Debian 13' ;;
+    rocky) printf 'Rocky Linux 10' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+load_selected_distro() {
+  local stored
+  if [[ -f "${selected_distro_file}" ]]; then
+    stored="$(tr -d '\r\n' < "${selected_distro_file}")"
+    normalise_distro "${stored}"
+  else
+    printf 'ubuntu'
+  fi
+}
+
+set_distro_context() {
+  lab_distro="$(normalise_distro "$1")"
+  export LAB_DISTRO="${lab_distro}"
+}
+
+save_selected_distro() {
+  mkdir -p "$(dirname "${selected_distro_file}")"
+  printf '%s\n' "${lab_distro}" > "${selected_distro_file}"
+}
+
+container_exists() {
+  docker container inspect "${container_name}" >/dev/null 2>&1
+}
+
+container_running() {
+  [[ "$(docker container inspect --format '{{.State.Running}}' "${container_name}" 2>/dev/null || true)" == "true" ]]
+}
+
+container_distro() {
+  docker container inspect \
+    --format '{{index .Config.Labels "cloudsprocket.distro"}}' \
+    "${container_name}" 2>/dev/null || true
+}
+
+adopt_container_distro() {
+  local actual
+  if container_exists; then
+    actual="$(container_distro)"
+    if [[ -n "${actual}" && "${actual}" != '<no value>' ]]; then
+      set_distro_context "${actual}"
+    fi
+  fi
+}
+
+require_running() {
+  container_running || fail "The lab is not running. Start it with lab up."
+}
+
+normalise_drill() {
+  case "${1:-}" in
+    01|service-failure|01-service-failure) printf '01-service-failure' ;;
+    02|full-filesystem|02-full-filesystem) printf '02-full-filesystem' ;;
+    *) fail "Unknown drill '${1:-}'. Run lab drills to see the available incidents." ;;
+  esac
+}
+
+version_at_least() {
+  local current="$1" required="$2"
+  awk -v current="${current}" -v required="${required}" 'BEGIN {
+    split(current, c, "."); split(required, r, ".");
+    for (i = 1; i <= 3; i++) {
+      c[i] += 0; r[i] += 0;
+      if (c[i] > r[i]) exit 0;
+      if (c[i] < r[i]) exit 1;
+    }
+    exit 0;
+  }'
+}
+
+doctor() {
+  local errors=0 compose_version holders holder label available_kb
+
+  printf 'Linux Server Rescue doctor\n\n'
+  printf 'Target distribution: %s (%s)\n' "$(distro_display "${lab_distro}")" "${lab_distro}"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    printf 'FAIL  Docker was not found. Install Docker Engine or Docker Desktop.\n'
+    return 1
+  fi
+  printf 'PASS  Docker CLI is installed.\n'
+
+  if ! docker info >/dev/null 2>&1; then
+    printf 'FAIL  The Docker daemon is not reachable. Start Docker and try again.\n'
+    return 1
+  fi
+  printf 'PASS  Docker daemon is reachable.\n'
+
+  if ! compose_version="$(docker compose version --short 2>/dev/null)"; then
+    printf 'FAIL  Docker Compose v2 is unavailable. Update Docker or install the Compose plugin.\n'
+    errors=$((errors + 1))
+  else
+    compose_version="${compose_version#v}"
+    compose_version="${compose_version%%-*}"
+    if version_at_least "${compose_version}" "${required_compose}"; then
+      printf 'PASS  Docker Compose %s meets the %s minimum.\n' "${compose_version}" "${required_compose}"
+    else
+      printf 'FAIL  Docker Compose %s is too old; version %s or later is required.\n' \
+        "${compose_version}" "${required_compose}"
+      errors=$((errors + 1))
+    fi
+  fi
+
+  holders="$(docker ps --filter publish=8100 --format '{{.Names}}' 2>/dev/null || true)"
+  while IFS= read -r holder; do
+    [[ -z "${holder}" || "${holder}" == "${container_name}" ]] && continue
+    label="$(docker inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' "${holder}" 2>/dev/null || true)"
+    [[ -z "${label}" || "${label}" == '<no value>' ]] && label="unlabelled container"
+    printf 'FAIL  Port 8100 is held by %s (%s). Stop it before starting this lab.\n' "${holder}" "${label}"
+    errors=$((errors + 1))
+  done <<< "${holders}"
+  [[ -z "${holders}" || "${holders}" == "${container_name}" ]] \
+    && printf 'PASS  Port 8100 is available to this lab.\n'
+
+  if container_exists && ! container_running; then
+    printf 'WARN  A stopped %s container exists. lab up will recover it; lab reset will recreate it.\n' "${container_name}"
+  fi
+
+  available_kb="$(df -Pk "${root_dir}" 2>/dev/null | awk 'NR == 2 {print $4}' || true)"
+  if [[ "${available_kb}" =~ ^[0-9]+$ ]] && (( available_kb < 3145728 )); then
+    printf 'WARN  Less than 3 GB is free on the project drive. An image build may fail.\n'
+  else
+    printf 'PASS  Project drive has at least 3 GB free.\n'
+  fi
+
+  printf 'WARN  This lab uses a privileged container for real systemd. It is not a security boundary.\n'
+  printf '      It mounts no Docker socket, host filesystem, home directory or SSH keys.\n'
+
+  (( errors == 0 )) || return 1
+  printf '\nDoctor found no blocking problems.\n'
+}
+
+wait_for_lab_ready() {
+  local active health system_state
+
+  for _ in {1..90}; do
+    if container_running; then
+      active="$(docker_exec "${container_name}" sh -c \
+        'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true' 2>/dev/null || true)"
+      health="$(docker container inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' \
+        "${container_name}" 2>/dev/null || true)"
+
+      if [[ -z "${active}" && "${health}" == "healthy" ]]; then
+        return 0
+      fi
+
+      if [[ -n "${active}" ]]; then
+        system_state="$(docker_exec "${container_name}" systemctl is-system-running 2>/dev/null || true)"
+        if [[ "${system_state}" == "running" || "${system_state}" == "degraded" ]]; then
+          return 0
+        fi
+      fi
+    fi
+    sleep 1
+  done
+
+  compose ps
+  fail "The lab did not reach a ready or diagnosable incident state."
+}
+
+up() {
+  local requested actual
+  requested="$(normalise_distro "${1:-${lab_distro}}")"
+
+  if container_exists; then
+    actual="$(container_distro)"
+    if [[ -n "${actual}" && "${actual}" != '<no value>' && "${actual}" != "${requested}" ]]; then
+      fail "$(distro_display "${actual}") is already present. Run lab down before switching to $(distro_display "${requested}")."
+    fi
+  fi
+
+  set_distro_context "${requested}"
+  doctor
+  printf '\nBuilding and starting %s...\n' "$(distro_display "${lab_distro}")"
+  compose up --build --detach
+  wait_for_lab_ready
+  save_selected_distro
+  status
+}
+
+down() {
+  command -v docker >/dev/null 2>&1 || fail "Docker was not found."
+  adopt_container_distro
+  compose down --remove-orphans
+  printf 'Linux Server Rescue is down. %s drill state is preserved; lab reset clears it.\n' \
+    "$(distro_display "${lab_distro}")"
+}
+
+reset() {
+  command -v docker >/dev/null 2>&1 || fail "Docker was not found."
+  adopt_container_distro
+  printf 'Removing only %s resources in the %s Compose project, including its state volume...\n' \
+    "$(distro_display "${lab_distro}")" "${project_name}"
+  compose down --volumes --remove-orphans
+  up "${lab_distro}"
+}
+
+status() {
+  local active actual
+  if ! container_exists; then
+    printf 'Linux Server Rescue is down. Selected distribution: %s.\n' "$(distro_display "${lab_distro}")"
+    printf 'Start it with lab up, or choose another target with lab up <distribution>.\n'
+    return 0
+  fi
+
+  actual="$(container_distro)"
+  [[ -n "${actual}" && "${actual}" != '<no value>' ]] && set_distro_context "${actual}"
+  compose ps
+  printf '\nDistribution: %s (%s)\n' "$(distro_display "${lab_distro}")" "${lab_distro}"
+  printf 'Service URL: http://127.0.0.1:8100\n'
+  if container_running; then
+    active="$(docker_exec "${container_name}" sh -c 'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true')"
+    if [[ -n "${active}" ]]; then
+      printf 'Active drill: %s\n' "${active}"
+    else
+      printf 'Active drill: none\n'
+    fi
+  else
+    printf 'Container is stopped. lab up will recover it; lab reset will recreate it.\n'
+  fi
+}
+
+run_break() {
+  require_running
+  drill="$(normalise_drill "${1:-}")"
+  docker_exec --user root "${container_name}" "/opt/lab/drills/break/${drill}.sh"
+}
+
+run_verify() {
+  require_running
+  drill="$(normalise_drill "${1:-}")"
+  docker_exec --user root "${container_name}" "/opt/lab/drills/checks/${drill}.sh"
+}
+
+run_check() {
+  require_running
+  exercise="${1:-}"
+  [[ -n "${exercise}" ]] || fail "Provide an exercise number."
+  if ! docker_exec "${container_name}" test -x "/opt/lab/checks/${exercise}.sh"; then
+    fail "Exercise '${exercise}' is not available in this early build."
+  fi
+  docker_exec --user root "${container_name}" "/opt/lab/checks/${exercise}.sh"
+}
+
+drills() {
+  printf '01  service-failure  Beginner  Diagnose a service trapped in a restart loop.\n'
+  printf '02  full-filesystem  Beginner  Recover an application filesystem with no free space.\n'
+}
+
+distros() {
+  printf 'ubuntu  Ubuntu 26.04 LTS  apt  Debian family (default)\n'
+  printf 'debian  Debian 13         apt  Upstream Debian stable\n'
+  printf 'rocky   Rocky Linux 10    dnf  RHEL-compatible enterprise Linux\n'
+}
+
+shell_host() {
+  require_running
+  docker_exec --interactive --tty --user rescue --workdir /home/rescue "${container_name}" bash
+}
+
+logs() {
+  adopt_container_distro
+  compose logs --follow relay
+}
+
+usage() {
+  cat <<'EOF'
+Usage: lab <command> [argument]
+
+Commands:
+  up [distribution]   Build and start the selected distribution
+  down               Stop and remove lab containers
+  reset              Recreate the selected distribution and clear its drill state
+  status             Show distribution, health, URL and active drill
+  doctor [distro]    Check local requirements and conflicts
+  check <exercise>   Run an exercise check
+  break <drill>      Apply an incident
+  verify <drill>     Verify a repair without changing state
+  drills             List incidents
+  distros            List supported Linux distributions
+  shell              Open a shell on relay as the rescue user
+  logs               Follow container logs
+  version            Print the lab version
+EOF
+}
+
+set_distro_context "$(load_selected_distro)"
+
+case "${1:-help}" in
+  up) up "${2:-${lab_distro}}" ;;
+  down) down ;;
+  reset) reset ;;
+  status) status ;;
+  doctor) set_distro_context "${2:-${lab_distro}}"; doctor ;;
+  check) run_check "${2:-}" ;;
+  break) run_break "${2:-}" ;;
+  verify) run_verify "${2:-}" ;;
+  drills) drills ;;
+  distros) distros ;;
+  shell|ssh) shell_host ;;
+  logs) logs ;;
+  version) tr -d '\r\n' < "${root_dir}/VERSION"; printf '\n' ;;
+  help|-h|--help) usage ;;
+  *) fail "Unknown command '$1'. Run lab help." ;;
+esac

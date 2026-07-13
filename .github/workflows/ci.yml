@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate shell scripts
+        run: |
+          bash -n lab
+          find .devcontainer checks drills tests -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $null = [scriptblock]::Create((Get-Content -Raw ./lab.ps1))
+      - name: Validate Codespaces contract
+        run: python3 tests/codespaces-config.py
+      - name: Validate Compose model
+        run: docker compose --project-name lsr --file compose.yaml config --quiet
+
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [ubuntu, debian, rocky]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run complete incident suite on ${{ matrix.distro }}
+        run: bash ./tests/smoke.sh "${{ matrix.distro }}"
+
+  codespaces:
+    name: Codespaces smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build the dev container and run the Ubuntu incident suite
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: bash .devcontainer/post-create.sh && bash ./tests/smoke.sh ubuntu

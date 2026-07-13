@@ -1,0 +1,159 @@
+# Linux Server Rescue Practical Lab
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Ali-Shaikh/linux-server-rescue-practical-lab?quickstart=1)
+
+Diagnose and repair realistic Linux incidents on disposable servers you are
+allowed to break.
+
+> **Early build:** version 0.1.0-alpha.4 establishes the lab contract and ships two
+> complete rescue incidents. The wider curriculum is planned in
+> [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
+
+## What works today
+
+- A selectable real systemd host called `relay`: Ubuntu, Debian or Rocky Linux.
+- The same lifecycle commands in Bash and PowerShell.
+- Complete service-failure and full-filesystem drills with ordered hints,
+  self-verification and spoiler-fenced solutions.
+- Loopback-only access to the sample service at <http://127.0.0.1:8100>.
+- Idempotent drill state that refuses to stack incidents.
+- A one-click Codespaces environment with a dedicated Docker daemon.
+
+## Quick start
+
+Choose one distribution at a time:
+
+| Selector | Distribution | Package family | Notes |
+|---|---|---|---|
+| `ubuntu` | Ubuntu 26.04 LTS | `apt` | Default target |
+| `debian` | Debian 13 | `apt` | Upstream Debian stable |
+| `rocky` | Rocky Linux 10 | `dnf` | RHEL-compatible enterprise Linux |
+
+The Rocky major-version image receives rolling updates and currently resolves
+to Rocky Linux 10.2. Run `./lab distros` or `.\lab.ps1 distros` to see the
+matrix without starting Docker.
+
+### GitHub Codespaces
+
+Select the **Open in GitHub Codespaces** badge above. The configuration requests
+at least 2 CPU cores, 8 GB of memory and 32 GB of storage. It creates a
+dedicated Docker-in-Docker daemon, keeps forwarded port 8100 private, and does
+not start or download a lab image until you choose a distribution.
+
+When the terminal is ready:
+
+```bash
+./lab up ubuntu
+./lab break 01
+./lab shell
+```
+
+In the browser editor, open **Ports** and select **Rescue web service** to reach
+the forwarded application. Codespaces can consume included usage or incur
+compute and storage charges. Stop it when pausing and delete it when finished.
+See the [Codespaces guide](docs/CODESPACES.md) for lifecycle, cost and security
+details.
+
+### macOS and Linux
+
+You need Git, Docker Engine or Docker Desktop, Docker Compose 2.20 or later,
+and about 3 GB of free disk space.
+
+```bash
+git clone https://github.com/Ali-Shaikh/linux-server-rescue-practical-lab.git
+cd linux-server-rescue-practical-lab
+./lab doctor
+./lab up debian
+./lab break 01
+./lab shell
+```
+
+### Windows PowerShell
+
+```powershell
+git clone https://github.com/Ali-Shaikh/linux-server-rescue-practical-lab.git
+Set-Location linux-server-rescue-practical-lab
+.\lab.ps1 doctor
+.\lab.ps1 up rocky
+.\lab.ps1 break 01
+.\lab.ps1 shell
+```
+
+Open [`drills/01-service-failure.md`](drills/01-service-failure.md) for the
+incident ticket. When you believe the server is repaired, leave the shell and
+run `./lab verify 01` or `.\lab.ps1 verify 01`.
+
+## Available incidents
+
+| Number | Incident | Capability |
+|---|---|---|
+| `01` | [Service failure](drills/01-service-failure.md) | Diagnose a systemd service trapped in a restart loop. |
+| `02` | [Full filesystem](drills/02-full-filesystem.md) | Find and recover the application filesystem that has no free space. |
+
+## Command contract
+
+| Command | Purpose |
+|---|---|
+| `up [distribution]` | Build and start Ubuntu, Debian or Rocky Linux. |
+| `down` | Stop and remove only this lab's containers and network. |
+| `reset` | Remove containers, the lab network and lab volumes, then rebuild a healthy lab. |
+| `status` | Show container health, the service URL and the active drill. |
+| `doctor` | Check Docker, Compose, disk space, port 8100 and stale state. |
+| `check <exercise>` | Run an exercise check when exercises are added. |
+| `break <drill>` | Apply an incident without stacking a second drill. |
+| `verify <drill>` | Inspect the repair without changing drill state. |
+| `drills` | List the available incidents. |
+| `distros` | List the supported distribution targets. |
+| `shell` | Open a shell as the `rescue` user. |
+| `logs` | Follow the lab container logs. |
+| `version` | Print the lab version. |
+
+## Safety and trust boundary
+
+The host uses real systemd, which requires `privileged: true` and the host
+cgroup namespace in Docker Compose. Docker documents that a privileged
+container is not a security boundary and can potentially affect its host.
+
+This lab does not mount the Docker socket, your home directory, your SSH keys,
+or the host filesystem. It publishes its only port on `127.0.0.1`, labels its
+resources `cloudsprocket.lab=rescue`, and its wrappers act only on the `lsr`
+Compose project. Inspect [`compose.yaml`](compose.yaml) before running it, and
+do not run an untrusted fork.
+
+Codespaces uses a privileged Docker-in-Docker development container and then
+runs the same privileged systemd lab inside its dedicated daemon. It does not
+mount an external Docker socket. The codespace is still disposable rather than
+a security boundary; inspect [its configuration](.devcontainer/devcontainer.json)
+before launching an untrusted branch.
+
+`down` keeps the small drill-state volume so a stopped session can resume.
+The saved fault is restored when that distribution starts again. `reset`
+removes the state volume and returns the lab to a clean, healthy state.
+Each distribution has a separate state volume. Run `down` before changing
+targets, then start the next one with `up <distribution>`.
+
+Incident 02 mounts a size-limited 16 MiB tmpfs inside the container. It does
+not fill or mount the host filesystem. The tmpfs uses at most 16 MiB of the
+Docker host's memory or swap and disappears with the container.
+
+## Capability boundary
+
+The current Docker backend teaches service, log, process, storage, permission,
+network and DNS diagnosis across Debian-family and RHEL-compatible user spaces.
+Containers share the Docker host's kernel, so `uname` reports that shared
+kernel and the lab will not pretend to teach GRUB, initramfs, kernel selection,
+physical disks or a real machine's boot path. Those topics require a later
+VM-backed track.
+
+Rocky Linux provides RHEL-compatible behaviour but does not include a Red Hat
+subscription, Red Hat support or restricted RHEL content.
+
+Once the image has been built, the lab and its exercises work offline.
+
+## Licence and trademarks
+
+The lab is free software under the [MIT licence](LICENSE).
+
+Distribution and product names are used nominatively. This project is not
+affiliated with or endorsed by Canonical, the Debian Project, the Rocky
+Enterprise Software Foundation, Red Hat or Docker.
