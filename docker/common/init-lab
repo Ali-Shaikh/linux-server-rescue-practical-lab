@@ -16,11 +16,17 @@ restore_full_filesystem() {
   systemctl enable rescue-data-volume.service >/dev/null
 }
 
+restore_dns_ghost() {
+  /opt/lab/drills/fixtures/03-dns-ghost.sh
+  systemctl enable rescue-upstream-check.service >/dev/null
+}
+
 if [[ -f "${active_file}" ]]; then
   active_drill="$(<"${active_file}")"
   case "${active_drill}" in
     01-service-failure) restore_service_failure ;;
     02-full-filesystem) restore_full_filesystem ;;
+    03-dns-ghost) restore_dns_ghost ;;
     *) printf 'WARN: unknown saved drill %s was not restored.\n' "${active_drill}" >&2 ;;
   esac
 fi

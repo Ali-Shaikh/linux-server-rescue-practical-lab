@@ -32,6 +32,10 @@ services:
       cloudsprocket.lab: rescue
       cloudsprocket.role: server
       cloudsprocket.distro: ${LAB_DISTRO:-ubuntu}
+    networks:
+      default:
+        aliases:
+          - rescue-api.internal
     healthcheck:
       test: ["CMD-SHELL", "systemctl is-active --quiet rescue-web.service && curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
       interval: 2s

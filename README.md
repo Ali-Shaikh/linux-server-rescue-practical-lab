@@ -5,7 +5,7 @@
 Diagnose and repair realistic Linux incidents on disposable servers you are
 allowed to break.
 
-> **Early build:** version 0.1.0-alpha.4 establishes the lab contract and ships two
+> **Early build:** version 0.1.0-alpha.5 establishes the lab contract and ships three
 > complete rescue incidents. The wider curriculum is planned in
 > [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
 
@@ -13,7 +13,7 @@ allowed to break.
 
 - A selectable real systemd host called `relay`: Ubuntu, Debian or Rocky Linux.
 - The same lifecycle commands in Bash and PowerShell.
-- Complete service-failure and full-filesystem drills with ordered hints,
+- Complete service-failure, full-filesystem and DNS-shadowing drills with ordered hints,
   self-verification and spoiler-fenced solutions.
 - Loopback-only access to the sample service at <http://127.0.0.1:8100>.
 - Idempotent drill state that refuses to stack incidents.
@@ -89,6 +89,7 @@ run `./lab verify 01` or `.\lab.ps1 verify 01`.
 |---|---|---|
 | `01` | [Service failure](drills/01-service-failure.md) | Diagnose a systemd service trapped in a restart loop. |
 | `02` | [Full filesystem](drills/02-full-filesystem.md) | Find and recover the application filesystem that has no free space. |
+| `03` | [DNS ghost](drills/03-dns-ghost.md) | Find local name-service configuration shadowing the expected DNS answer. |
 
 ## Command contract
 
