@@ -220,6 +220,15 @@ expect_broken 07
 bash ./lab down
 bash ./lab up "${distro}"
 expect_broken 07
+network_address="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay ip -4 -o address show scope global \
+  | awk 'NR == 1 {split($4, address, "/"); print address[1]}')"
+MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --noproxy '*' --fail --silent \
+  http://127.0.0.1:8080/health >/dev/null \
+  || fail "incident 07 lost its loopback health path after container recreation"
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --noproxy '*' --fail --silent \
+  --connect-timeout 1 "http://${network_address}:8080/health" >/dev/null 2>&1; then
+  fail "incident 07 did not restore its loopback-only listener after container recreation"
+fi
 
 MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
   "install -o root -g root -m 0644 /etc/rescue-web/config.json.last-known-good /etc/rescue-web/config.json && systemctl restart rescue-web.service"

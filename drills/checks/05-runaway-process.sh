@@ -26,8 +26,21 @@ if systemctl is-enabled --quiet "${unit}"; then
   exit 1
 fi
 
-if ! systemctl is-active --quiet rescue-web.service \
-  || ! curl --fail --silent http://127.0.0.1:8080/health >/dev/null; then
+if ! systemctl is-active --quiet rescue-web.service; then
+  printf 'NOT FIXED: the unwanted worker is gone, but rescue-web is not healthy.\n' >&2
+  exit 1
+fi
+
+health_ready=0
+for _ in {1..20}; do
+  if curl --fail --silent http://127.0.0.1:8080/health >/dev/null 2>&1; then
+    health_ready=1
+    break
+  fi
+  sleep 0.25
+done
+
+if (( health_ready == 0 )); then
   printf 'NOT FIXED: the unwanted worker is gone, but rescue-web is not healthy.\n' >&2
   exit 1
 fi
