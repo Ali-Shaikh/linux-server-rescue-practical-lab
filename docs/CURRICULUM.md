@@ -1,6 +1,6 @@
 # Linux Server Rescue curriculum
 
-Status: first two vertical slices in build, 2026-07-13.
+Status: first three vertical slices in build, 2026-07-13.
 
 ## Learning promise
 
@@ -27,12 +27,16 @@ arm64 and resource acceptance checks.
 
 ## Delivery order
 
+Stage numbers describe the capability progression, while incident numbers
+describe implementation and release order. They are intentionally independent,
+so an incident may implement a later curriculum stage first.
+
 | Stage | Capability | Candidate incidents | Backend | Status |
 |---|---|---|---|---|
 | 1 | Services and logs | Bad systemd override, restart loop, stale dependency | Docker | First incident implemented |
 | 2 | Capacity | Full filesystem, deleted-open file, exhausted inodes | Docker | Full-filesystem incident implemented |
 | 3 | Identity and access | Wrong ownership, broken sudo rule, locked service account | Docker | Planned |
-| 4 | Networking and DNS | Wrong listener, bad resolver, shadowed hosts entry | Docker | Planned |
+| 4 | Networking and DNS | Wrong listener, bad resolver, shadowed hosts entry | Docker | DNS shadow incident implemented |
 | 5 | Processes and performance | Runaway process, memory pressure, file descriptor exhaustion | Docker | Planned |
 | 6 | Change recovery | Invalid configuration, failed package transition, unsafe rollback | Docker | Planned |
 | 7 | Boot and block storage | Broken fstab, initramfs, bootloader and filesystem recovery | VM | Later track |

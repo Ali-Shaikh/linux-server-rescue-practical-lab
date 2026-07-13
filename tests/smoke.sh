@@ -92,5 +92,35 @@ bash ./lab verify 02
 bash ./lab reset
 expect_no_active_drill 01
 expect_no_active_drill 02
+expect_no_active_drill 03
+
+bash ./lab break 03
+expect_broken 03
+
+host_answer="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay getent ahostsv4 rescue-api.internal | awk 'NR == 1 {print $1}')"
+dns_answer="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay dig +short @127.0.0.11 rescue-api.internal A | awk 'NR == 1 {print $1}')"
+[[ "${host_answer}" == "203.0.113.99" && -n "${dns_answer}" && "${dns_answer}" != "${host_answer}" ]] \
+  || fail "incident 03 did not shadow the embedded DNS answer through the host resolver"
+
+# Applying an already-active incident must preserve the broken state.
+bash ./lab break 03
+expect_broken 03
+
+bash ./lab down
+bash ./lab up "${distro}"
+host_answer="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay getent ahostsv4 rescue-api.internal | awk 'NR == 1 {print $1}')"
+[[ "${host_answer}" == "203.0.113.99" ]] \
+  || fail "incident 03 was not restored after container recreation"
+expect_broken 03
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "grep -v 'cloudsprocket-dns-ghost' /etc/hosts > /run/hosts.clean && cat /run/hosts.clean > /etc/hosts && rm /run/hosts.clean && systemctl reset-failed rescue-upstream-check.service && systemctl restart rescue-upstream-check.service"
+
+bash ./lab verify 03
+
+bash ./lab reset
+expect_no_active_drill 01
+expect_no_active_drill 02
+expect_no_active_drill 03
 
 printf 'Smoke test passed for %s.\n' "${distro}"

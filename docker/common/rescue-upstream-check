@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly upstream_name="rescue-api.internal"
+readonly upstream_url="http://${upstream_name}:8080/health"
+
+for _ in {1..3}; do
+  if curl --noproxy '*' --fail --silent --show-error \
+    --connect-timeout 1 --max-time 2 "${upstream_url}" >/dev/null; then
+    printf 'Upstream %s is healthy.\n' "${upstream_name}"
+    exit 0
+  fi
+  sleep 0.25
+done
+
+resolved_address="$(getent ahostsv4 "${upstream_name}" | awk 'NR == 1 {print $1}')"
+printf 'Upstream check failed: %s resolves to %s.\n' \
+  "${upstream_name}" "${resolved_address:-no IPv4 address}" >&2
+exit 1

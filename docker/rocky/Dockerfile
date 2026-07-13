@@ -13,6 +13,8 @@ RUN dnf install --assumeyes \
 COPY docker/common/rescue-web.py /opt/rescue-web/server.py
 COPY docker/common/rescue-web.service /etc/systemd/system/rescue-web.service
 COPY docker/common/rescue-data-volume.service /etc/systemd/system/rescue-data-volume.service
+COPY docker/common/rescue-upstream-check /usr/local/bin/rescue-upstream-check
+COPY docker/common/rescue-upstream-check.service /etc/systemd/system/rescue-upstream-check.service
 COPY docker/common/init-lab /usr/local/sbin/init-lab
 COPY docker/common/configure-image.sh /tmp/configure-lab-image.sh
 COPY checks/ /opt/lab/checks/

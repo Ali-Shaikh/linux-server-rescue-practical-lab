@@ -93,6 +93,7 @@ normalise_drill() {
   case "${1:-}" in
     01|service-failure|01-service-failure) printf '01-service-failure' ;;
     02|full-filesystem|02-full-filesystem) printf '02-full-filesystem' ;;
+    03|dns-ghost|03-dns-ghost) printf '03-dns-ghost' ;;
     *) fail "Unknown drill '${1:-}'. Run lab drills to see the available incidents." ;;
   esac
 }
@@ -287,6 +288,7 @@ run_check() {
 drills() {
   printf '01  service-failure  Beginner  Diagnose a service trapped in a restart loop.\n'
   printf '02  full-filesystem  Beginner  Recover an application filesystem with no free space.\n'
+  printf '03  dns-ghost       Intermediate  Find local configuration shadowing the expected DNS answer.\n'
 }
 
 distros() {

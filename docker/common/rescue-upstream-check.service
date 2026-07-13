@@ -1,0 +1,14 @@
+[Unit]
+Description=Check the rescue API upstream
+After=network-online.target rescue-web.service
+Requires=rescue-web.service
+
+[Service]
+Type=oneshot
+User=rescue
+Group=rescue
+ExecStart=/usr/local/bin/rescue-upstream-check
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -92,6 +92,7 @@ function Resolve-Drill {
     switch ($Name) {
         { $_ -in @("01", "service-failure", "01-service-failure") } { return "01-service-failure" }
         { $_ -in @("02", "full-filesystem", "02-full-filesystem") } { return "02-full-filesystem" }
+        { $_ -in @("03", "dns-ghost", "03-dns-ghost") } { return "03-dns-ghost" }
         default { throw "Unknown drill '$Name'. Run .\lab.ps1 drills to see the available incidents." }
     }
 }
@@ -319,6 +320,7 @@ try {
         "drills" {
             Write-Host "01  service-failure  Beginner  Diagnose a service trapped in a restart loop."
             Write-Host "02  full-filesystem  Beginner  Recover an application filesystem with no free space."
+            Write-Host "03  dns-ghost       Intermediate  Find local configuration shadowing the expected DNS answer."
         }
         "distros" { Show-Distributions }
         { $_ -in @("shell", "ssh") } {
