@@ -188,6 +188,11 @@ The complete incident runtime suite continues to run natively on amd64 across
 Ubuntu, Debian, Rocky and Codespaces. Multi-architecture runtime smoke remains
 separate from this build-compatibility gate.
 
+The separate `Usability evidence` workflow measures the fresh-clone Ubuntu
+command path and samples peak container memory throughout the complete Ubuntu
+incident suite. See the [release evidence contract](docs/RELEASE-EVIDENCE.md)
+for thresholds, generated artefacts and the manual evidence boundary.
+
 ## Licence and trademarks
 
 The lab is free software under the [MIT licence](LICENSE).
