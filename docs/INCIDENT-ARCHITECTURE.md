@@ -79,3 +79,8 @@ A companion service must be unprivileged, have no host port unless the exercise
 requires one, mount no sensitive host path, expose a health check, and have
 bounded resources. Its upstream image or toolchain is selected and pinned from
 current authoritative documentation during implementation.
+
+Release validation builds every learner Dockerfile for amd64 and arm64 with
+Buildx and QEMU. Catalogue-declared companion images must publish manifests for
+both architectures. This gate validates build compatibility only and does not
+publish images or replace the native runtime incident matrix.

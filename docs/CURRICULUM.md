@@ -77,6 +77,12 @@ supported distribution, amd64 and arm64 image builds, restart resilience, and
 a 2-core and 8 GB resource run. The honest Codespaces quick start is now
 implemented and remains part of the release regression suite.
 
+The dedicated release-image workflow builds all three learner images on amd64
+and arm64 and checks every scenario companion manifest for both architectures.
+It runs for relevant changes, version tags and manual dispatches without
+publishing images. Runtime smoke remains native amd64 coverage; cross-platform
+runtime smoke is a separate future gate.
+
 ## Deliberate exclusions
 
 The Docker backend shares its host kernel. It cannot faithfully reproduce a
