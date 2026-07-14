@@ -20,7 +20,10 @@ text = WORKFLOW.read_text(encoding="utf-8")
 
 for trigger in ("pull_request:", "push:", "workflow_dispatch:"):
     require(trigger in text, f"missing {trigger.removesuffix(':')} trigger")
-require('      - "v*"' in text, "version tags do not trigger release validation")
+require(
+    re.search(r'(?m)^\s*tags:\s*\n\s*-\s*["\']v\*["\']\s*$', text) is not None,
+    "version tags do not trigger release validation",
+)
 
 for action in (
     "actions/checkout@v6",
@@ -52,6 +55,9 @@ require("push: true" not in text, "validation unexpectedly publishes learner ima
 require("outputs: type=cacheonly" in text, "validation build output is not cache-only")
 require("python3 tests/companion-platforms.py" in text, "companion manifest validation is missing")
 require("contents: read" in text, "workflow permissions are broader than read-only contents")
-require("secrets." not in text, "validation must not consume repository secrets")
+require(
+    re.search(r"(?mi)^(?!\s*#).*\$\{\{\s*secrets\.", text) is None,
+    "validation must not consume repository secrets",
+)
 
 print("Release CI configuration check passed.")

@@ -7,6 +7,7 @@ import csv
 import json
 import subprocess
 from pathlib import Path
+from typing import NoReturn
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -14,7 +15,7 @@ CATALOG = ROOT / "drills" / "catalog.tsv"
 REQUIRED_PLATFORMS = {"linux/amd64", "linux/arm64"}
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise SystemExit(f"Companion platform check failed: {message}")
 
 
