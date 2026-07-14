@@ -1,0 +1,5 @@
+# The learner-node image needs only its distro Dockerfiles and generic bootstrap.
+# Runtime content is mounted explicitly by Compose and never enters this context.
+**
+!docker/
+!docker/**

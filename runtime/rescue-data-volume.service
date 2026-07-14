@@ -5,7 +5,7 @@ Before=rescue-web.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/lab/drills/fixtures/02-full-filesystem.sh
+ExecStart=/bin/bash /opt/lab/drills/fixtures/02-full-filesystem.sh
 RemainAfterExit=yes
 
 [Install]

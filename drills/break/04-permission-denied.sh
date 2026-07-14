@@ -25,7 +25,7 @@ if [[ -f "${active_file}" ]]; then
   exit 1
 fi
 
-/opt/lab/drills/fixtures/04-permission-denied.sh
+bash /opt/lab/drills/fixtures/04-permission-denied.sh
 systemctl restart rescue-web.service >/dev/null 2>&1 || true
 
 incident_visible=0

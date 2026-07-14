@@ -15,16 +15,22 @@ jobs:
       - name: Validate shell scripts
         run: |
           bash -n lab docker/common/configure-image.sh docker/common/init-lab
-          bash -n docker/common/rescue-upstream-check docker/common/rescue-cpu-hog
-          find .devcontainer checks drills tests -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+          find .devcontainer checks drills runtime tests -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
       - name: Validate application configuration
         run: |
-          python3 -m py_compile docker/common/rescue-web.py
-          python3 -m json.tool docker/common/rescue-web-config.json >/dev/null
+          python3 -m py_compile runtime/rescue-web.py
+          python3 -m json.tool runtime/rescue-web-config.json >/dev/null
+      - name: Validate repository architecture
+        run: python3 tests/repository-contract.py
       - name: Validate PowerShell syntax
         shell: pwsh
         run: |
           $null = [scriptblock]::Create((Get-Content -Raw ./lab.ps1))
+      - name: Validate wrapper catalogue parity
+        run: |
+          bash ./lab drills > /tmp/lab-drills.bash
+          pwsh -NoLogo -NoProfile -File ./lab.ps1 drills > /tmp/lab-drills.pwsh
+          diff --unified /tmp/lab-drills.bash /tmp/lab-drills.pwsh
       - name: Validate Codespaces contract
         run: python3 tests/codespaces-config.py
       - name: Validate Compose model

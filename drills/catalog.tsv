@@ -1,0 +1,8 @@
+id	slug	difficulty	scope	overlay	description
+01	service-failure	Beginner	portable	none	Diagnose a service trapped in a restart loop.
+02	full-filesystem	Beginner	portable	none	Recover an application filesystem with no free space.
+03	dns-ghost	Intermediate	portable	none	Find local configuration shadowing the expected DNS answer.
+04	permission-denied	Beginner	portable	none	Repair least-privilege access to application data.
+05	runaway-process	Intermediate	portable	none	Trace and stop a restart-managed CPU worker.
+06	invalid-configuration	Intermediate	portable	none	Validate and roll back malformed service configuration.
+07	wrong-listener	Intermediate	portable	none	Repair a service bound to the wrong network interface.

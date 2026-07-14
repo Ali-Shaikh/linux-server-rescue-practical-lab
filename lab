@@ -6,12 +6,24 @@ readonly project_name="lsr"
 readonly container_name="lsr-relay"
 readonly required_compose="2.20.0"
 readonly selected_distro_file="${root_dir}/.local/active-distro"
+readonly active_scenario_file="${root_dir}/.local/active-scenario"
+readonly drill_catalog="${root_dir}/drills/catalog.tsv"
 
 lab_distro="ubuntu"
+lab_overlay=""
 
 compose() {
-  LAB_DISTRO="${lab_distro}" docker compose \
-    --project-name "${project_name}" --file "${root_dir}/compose.yaml" "$@"
+  local -a compose_command=(
+    docker compose
+    --project-name "${project_name}"
+    --file "${root_dir}/compose.yaml"
+  )
+
+  if [[ -n "${lab_overlay}" ]]; then
+    compose_command+=(--file "${root_dir}/${lab_overlay}")
+  fi
+
+  LAB_DISTRO="${lab_distro}" "${compose_command[@]}" "$@"
 }
 
 docker_exec() {
@@ -90,16 +102,73 @@ require_running() {
 }
 
 normalise_drill() {
-  case "${1:-}" in
-    01|service-failure|01-service-failure) printf '01-service-failure' ;;
-    02|full-filesystem|02-full-filesystem) printf '02-full-filesystem' ;;
-    03|dns-ghost|03-dns-ghost) printf '03-dns-ghost' ;;
-    04|permission-denied|04-permission-denied) printf '04-permission-denied' ;;
-    05|runaway-process|05-runaway-process) printf '05-runaway-process' ;;
-    06|invalid-configuration|06-invalid-configuration) printf '06-invalid-configuration' ;;
-    07|wrong-listener|07-wrong-listener) printf '07-wrong-listener' ;;
-    *) fail "Unknown drill '${1:-}'. Run lab drills to see the available incidents." ;;
-  esac
+  local record drill_id slug
+  record="$(drill_record "${1:-}")" \
+    || fail "Unknown drill '${1:-}'. Run lab drills to see the available incidents."
+  IFS=$'\t' read -r drill_id slug _ <<< "${record}"
+  printf '%s-%s' "${drill_id}" "${slug}"
+}
+
+drill_record() {
+  local query="$1"
+  awk -F '\t' -v query="${query}" '
+    NR > 1 {
+      full_id = $1 "-" $2
+      if (query == $1 || query == $2 || query == full_id) {
+        print
+        found = 1
+        exit
+      }
+    }
+    END { if (!found) exit 1 }
+  ' "${drill_catalog}"
+}
+
+drill_overlay() {
+  local record overlay
+  record="$(drill_record "$1")" || return 1
+  IFS=$'\t' read -r _ _ _ _ overlay _ <<< "${record}"
+  [[ "${overlay}" == "none" ]] || printf '%s' "${overlay}"
+}
+
+validate_overlay() {
+  local overlay="$1"
+  [[ "${overlay}" == scenarios/*/compose.yaml && "${overlay}" != *..* ]] \
+    || fail "Scenario overlay '${overlay}' is not a safe repository path."
+  awk -F '\t' -v overlay="${overlay}" \
+    'NR > 1 && $5 == overlay { found = 1 } END { exit !found }' \
+    "${drill_catalog}" \
+    || fail "Scenario overlay '${overlay}' is not listed in the drill catalogue."
+  [[ -f "${root_dir}/${overlay}" ]] \
+    || fail "Scenario overlay '${overlay}' does not exist."
+}
+
+load_active_overlay() {
+  local stored
+  if [[ ! -f "${active_scenario_file}" ]]; then
+    return 0
+  fi
+
+  stored="$(tr -d '\r\n' < "${active_scenario_file}")"
+  [[ -n "${stored}" ]] || return 0
+  validate_overlay "${stored}"
+  printf '%s' "${stored}"
+}
+
+set_overlay_context() {
+  local overlay="${1:-}"
+  [[ -z "${overlay}" ]] || validate_overlay "${overlay}"
+  lab_overlay="${overlay}"
+}
+
+save_active_overlay() {
+  mkdir -p "$(dirname "${active_scenario_file}")"
+  printf '%s\n' "${lab_overlay}" > "${active_scenario_file}"
+}
+
+clear_active_overlay() {
+  rm -f "${active_scenario_file}"
+  lab_overlay=""
 }
 
 version_at_least() {
@@ -171,7 +240,7 @@ doctor() {
   fi
 
   printf 'WARN  This lab uses a privileged container for real systemd. It is not a security boundary.\n'
-  printf '      It mounts no Docker socket, host filesystem, home directory or SSH keys.\n'
+  printf '      It mounts only public lab content read-only; no Docker socket, home directory or SSH keys.\n'
 
   (( errors == 0 )) || return 1
   printf '\nDoctor found no blocking problems.\n'
@@ -239,6 +308,7 @@ reset() {
   printf 'Removing only %s resources in the %s Compose project, including its state volume...\n' \
     "$(distro_display "${lab_distro}")" "${project_name}"
   compose down --volumes --remove-orphans
+  clear_active_overlay
   up "${lab_distro}"
 }
 
@@ -247,6 +317,7 @@ status() {
   if ! container_exists; then
     printf 'Linux Server Rescue is down. Selected distribution: %s.\n' "$(distro_display "${lab_distro}")"
     printf 'Start it with lab up, or choose another target with lab up <distribution>.\n'
+    printf 'Scenario overlay: %s\n' "${lab_overlay:-none}"
     return 0
   fi
 
@@ -265,38 +336,66 @@ status() {
   else
     printf 'Container is stopped. lab up will recover it; lab reset will recreate it.\n'
   fi
+  printf 'Scenario overlay: %s\n' "${lab_overlay:-none}"
 }
 
 run_break() {
+  local drill overlay active previous_overlay
   require_running
   drill="$(normalise_drill "${1:-}")"
-  docker_exec --user root "${container_name}" "/opt/lab/drills/break/${drill}.sh"
+  overlay="$(drill_overlay "${drill}")"
+  active="$(docker_exec "${container_name}" sh -c \
+    'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true')"
+
+  if [[ -n "${active}" && "${active}" != "${drill}" ]]; then
+    fail "Cannot start ${drill} while ${active} is active. Run lab reset first."
+  fi
+
+  if [[ -n "${overlay}" ]]; then
+    if [[ -n "${lab_overlay}" && "${lab_overlay}" != "${overlay}" ]]; then
+      fail "Scenario overlay ${lab_overlay} is active. Run lab reset first."
+    fi
+    previous_overlay="${lab_overlay}"
+    set_overlay_context "${overlay}"
+    if ! compose up --build --detach; then
+      set_overlay_context "${previous_overlay}"
+      fail "The scenario services for ${drill} could not be started."
+    fi
+    save_active_overlay
+    wait_for_lab_ready
+  elif [[ -n "${lab_overlay}" ]]; then
+    fail "Scenario overlay ${lab_overlay} is active. Run lab reset first."
+  fi
+
+  docker_exec --user root "${container_name}" \
+    bash "/opt/lab/drills/break/${drill}.sh"
 }
 
 run_verify() {
+  local drill
   require_running
   drill="$(normalise_drill "${1:-}")"
-  docker_exec --user root "${container_name}" "/opt/lab/drills/checks/${drill}.sh"
+  docker_exec --user root "${container_name}" \
+    bash "/opt/lab/drills/checks/${drill}.sh"
 }
 
 run_check() {
   require_running
   exercise="${1:-}"
   [[ -n "${exercise}" ]] || fail "Provide an exercise number."
-  if ! docker_exec "${container_name}" test -x "/opt/lab/checks/${exercise}.sh"; then
+  if ! docker_exec "${container_name}" test -f "/opt/lab/checks/${exercise}.sh"; then
     fail "Exercise '${exercise}' is not available in this early build."
   fi
-  docker_exec --user root "${container_name}" "/opt/lab/checks/${exercise}.sh"
+  docker_exec --user root "${container_name}" bash "/opt/lab/checks/${exercise}.sh"
 }
 
 drills() {
-  printf '01  service-failure  Beginner  Diagnose a service trapped in a restart loop.\n'
-  printf '02  full-filesystem  Beginner  Recover an application filesystem with no free space.\n'
-  printf '03  dns-ghost       Intermediate  Find local configuration shadowing the expected DNS answer.\n'
-  printf '04  permission-denied  Beginner  Repair least-privilege access to application data.\n'
-  printf '05  runaway-process  Intermediate  Trace and stop a restart-managed CPU worker.\n'
-  printf '06  invalid-configuration  Intermediate  Validate and roll back malformed service configuration.\n'
-  printf '07  wrong-listener  Intermediate  Repair a service bound to the wrong network interface.\n'
+  local drill_id slug difficulty scope overlay description
+  while IFS=$'\t' read -r drill_id slug difficulty scope overlay description; do
+    [[ "${drill_id}" == "id" ]] && continue
+    printf '%-2s  %-22s  %-12s  %s\n' \
+      "${drill_id}" "${slug}" "${difficulty}" "${description}"
+  done < "${drill_catalog}"
 }
 
 distros() {
@@ -337,6 +436,7 @@ EOF
 }
 
 set_distro_context "$(load_selected_distro)"
+set_overlay_context "$(load_active_overlay)"
 
 case "${1:-help}" in
   up) up "${2:-${lab_distro}}" ;;
