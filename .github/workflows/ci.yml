@@ -33,6 +33,10 @@ jobs:
           diff --unified /tmp/lab-drills.bash /tmp/lab-drills.pwsh
       - name: Validate Codespaces contract
         run: python3 tests/codespaces-config.py
+      - name: Validate release image CI contract
+        run: |
+          python3 -m py_compile tests/companion-platforms.py
+          python3 tests/release-ci-config.py
       - name: Validate Compose model
         run: docker compose --project-name lsr --file compose.yaml config --quiet
 

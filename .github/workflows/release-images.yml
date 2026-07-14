@@ -1,0 +1,96 @@
+name: Release image validation
+
+on:
+  pull_request:
+    paths:
+      - .dockerignore
+      - .github/workflows/release-images.yml
+      - compose.yaml
+      - docker/**
+      - drills/catalog.tsv
+      - scenarios/**
+      - tests/companion-platforms.py
+      - tests/release-ci-config.py
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - .dockerignore
+      - .github/workflows/release-images.yml
+      - compose.yaml
+      - docker/**
+      - drills/catalog.tsv
+      - scenarios/**
+      - tests/companion-platforms.py
+      - tests/release-ci-config.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-images-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
+
+jobs:
+  learner-image:
+    name: ${{ matrix.distro }} learner image (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - distro: ubuntu
+            platform: linux/amd64
+            arch: amd64
+          - distro: ubuntu
+            platform: linux/arm64
+            arch: arm64
+          - distro: debian
+            platform: linux/amd64
+            arch: amd64
+          - distro: debian
+            platform: linux/arm64
+            arch: arm64
+          - distro: rocky
+            platform: linux/amd64
+            arch: amd64
+          - distro: rocky
+            platform: linux/arm64
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up QEMU
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build ${{ matrix.distro }} for ${{ matrix.platform }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/${{ matrix.distro }}/Dockerfile
+          platforms: ${{ matrix.platform }}
+          pull: true
+          push: false
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=learner-${{ matrix.distro }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=learner-${{ matrix.distro }}-${{ matrix.arch }}
+
+  companion-images:
+    name: Companion image manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Validate scenario image platforms
+        run: python3 tests/companion-platforms.py

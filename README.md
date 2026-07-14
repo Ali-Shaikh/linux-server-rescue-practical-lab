@@ -21,6 +21,7 @@ allowed to break.
 - Stable learner-node images with public incident content mounted read-only from
   the checked-out repository.
 - A one-click Codespaces environment with a dedicated Docker daemon.
+- Dedicated build validation for every learner image on amd64 and arm64.
 
 ## Quick start
 
@@ -174,6 +175,18 @@ subscription, Red Hat support or restricted RHEL content.
 
 Once the learner and pinned companion images have been downloaded or built,
 the checked-out lab and its exercises work offline.
+
+## Release validation
+
+The `Release image validation` workflow builds the Ubuntu, Debian and Rocky
+learner images separately for `linux/amd64` and `linux/arm64`. It also verifies
+that every catalogue-declared companion image publishes both architectures.
+The workflow runs for relevant pull requests and `main` changes, every `v*`
+tag, and manual dispatches. It validates builds but does not publish images.
+
+The complete incident runtime suite continues to run natively on amd64 across
+Ubuntu, Debian, Rocky and Codespaces. Multi-architecture runtime smoke remains
+separate from this build-compatibility gate.
 
 ## Licence and trademarks
 
