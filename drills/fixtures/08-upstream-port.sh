@@ -24,8 +24,9 @@ if [[ ! "${upstream_url}" =~ ^http://[a-zA-Z0-9][a-zA-Z0-9.-]*:[0-9]{1,5}/[a-zA-
   exit 1
 fi
 
-response="$(curl --noproxy '*' --fail --silent --show-error \
-  --connect-timeout 1 --max-time 2 "${upstream_url}")"
+response="$(NO_PROXY='*' no_proxy='*' \
+  curl --fail --silent --show-error --connect-timeout 1 --max-time 2 \
+    "${upstream_url}")"
 if [[ "${response}" != *'"service":"upstream-api"'* \
   || "${response}" != *'"status":"ok"'* ]]; then
   printf 'The upstream returned an unexpected health response.\n' >&2

@@ -33,8 +33,9 @@ fi
 
 upstream_ready=0
 for _ in {1..20}; do
-  if curl --noproxy '*' --fail --silent --connect-timeout 1 --max-time 2 \
-    "${correct_url}" | grep --quiet '"service":"upstream-api"'; then
+  if NO_PROXY='*' no_proxy='*' \
+    curl --fail --silent --connect-timeout 1 --max-time 2 "${correct_url}" \
+    | grep --quiet '"service":"upstream-api"'; then
     upstream_ready=1
     break
   fi
@@ -52,8 +53,9 @@ systemctl enable "${service}" >/dev/null
 systemctl restart "${service}" >/dev/null 2>&1 || true
 
 if ! systemctl is-failed --quiet "${service}" \
-  || curl --noproxy '*' --fail --silent --connect-timeout 1 --max-time 2 \
-    "${wrong_url}" >/dev/null 2>&1; then
+  || NO_PROXY='*' no_proxy='*' \
+    curl --fail --silent --connect-timeout 1 --max-time 2 "${wrong_url}" \
+      >/dev/null 2>&1; then
   clean_fault
   printf 'The incident did not take effect. Run lab reset and try again.\n' >&2
   exit 1

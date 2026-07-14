@@ -36,8 +36,9 @@ if ! systemctl is-enabled --quiet "${service}" \
   exit 1
 fi
 
-if ! response="$(curl --noproxy '*' --fail --silent --show-error \
-  --connect-timeout 1 --max-time 2 "${upstream_url}")"; then
+if ! response="$(NO_PROXY='*' no_proxy='*' \
+  curl --fail --silent --show-error --connect-timeout 1 --max-time 2 \
+    "${upstream_url}")"; then
   printf 'NOT FIXED: the configured upstream health endpoint is unavailable.\n' >&2
   exit 1
 fi
