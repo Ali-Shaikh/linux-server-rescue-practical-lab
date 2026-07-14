@@ -123,4 +123,121 @@ expect_no_active_drill 01
 expect_no_active_drill 02
 expect_no_active_drill 03
 
+expect_no_active_drill 04
+bash ./lab break 04
+expect_broken 04
+
+data_owner="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay stat --format='%U:%G' /var/lib/rescue-web)"
+data_mode="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay stat --format='%a' /var/lib/rescue-web)"
+[[ "${data_owner}" == "root:root" && "${data_mode}" == "750" ]] \
+  || fail "incident 04 did not apply the expected least-access ownership fault"
+
+bash ./lab break 04
+expect_broken 04
+
+bash ./lab down
+bash ./lab up "${distro}"
+data_owner="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay stat --format='%U:%G' /var/lib/rescue-web)"
+[[ "${data_owner}" == "root:root" ]] \
+  || fail "incident 04 was not restored after container recreation"
+expect_broken 04
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "chown rescue:rescue /var/lib/rescue-web && chmod 0750 /var/lib/rescue-web && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
+
+bash ./lab verify 04
+
+bash ./lab reset
+for drill in 01 02 03 04 05; do
+  expect_no_active_drill "${drill}"
+done
+
+bash ./lab break 05
+expect_broken 05
+MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl is-active --quiet rescue-cpu-hog.service \
+  || fail "incident 05 did not start the bounded CPU worker"
+
+bash ./lab break 05
+expect_broken 05
+
+bash ./lab down
+bash ./lab up "${distro}"
+MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl is-active --quiet rescue-cpu-hog.service \
+  || fail "incident 05 was not restored after container recreation"
+expect_broken 05
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl disable --now rescue-cpu-hog.service
+bash ./lab verify 05
+
+bash ./lab reset
+for drill in 01 02 03 04 05 06; do
+  expect_no_active_drill "${drill}"
+done
+
+bash ./lab break 06
+expect_broken 06
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay python3 -m json.tool \
+  /etc/rescue-web/config.json >/dev/null 2>&1; then
+  fail "incident 06 did not deploy malformed JSON"
+fi
+
+bash ./lab break 06
+expect_broken 06
+
+bash ./lab down
+bash ./lab up "${distro}"
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay python3 -m json.tool \
+  /etc/rescue-web/config.json >/dev/null 2>&1; then
+  fail "incident 06 was not restored after container recreation"
+fi
+expect_broken 06
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "install -o root -g root -m 0644 /etc/rescue-web/config.json.last-known-good /etc/rescue-web/config.json && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
+
+bash ./lab verify 06
+
+bash ./lab reset
+for drill in 01 02 03 04 05 06 07; do
+  expect_no_active_drill "${drill}"
+done
+
+bash ./lab break 07
+expect_broken 07
+network_address="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay ip -4 -o address show scope global \
+  | awk 'NR == 1 {split($4, address, "/"); print address[1]}')"
+MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --noproxy '*' --fail --silent \
+  http://127.0.0.1:8080/health >/dev/null \
+  || fail "incident 07 did not retain its loopback health path"
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --noproxy '*' --fail --silent \
+  --connect-timeout 1 "http://${network_address}:8080/health" >/dev/null 2>&1; then
+  fail "incident 07 unexpectedly answered on the container network interface"
+fi
+
+bash ./lab break 07
+expect_broken 07
+
+bash ./lab down
+bash ./lab up "${distro}"
+expect_broken 07
+network_address="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay ip -4 -o address show scope global \
+  | awk 'NR == 1 {split($4, address, "/"); print address[1]}')"
+MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --noproxy '*' --fail --silent \
+  http://127.0.0.1:8080/health >/dev/null \
+  || fail "incident 07 lost its loopback health path after container recreation"
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --noproxy '*' --fail --silent \
+  --connect-timeout 1 "http://${network_address}:8080/health" >/dev/null 2>&1; then
+  fail "incident 07 did not restore its loopback-only listener after container recreation"
+fi
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "install -o root -g root -m 0644 /etc/rescue-web/config.json.last-known-good /etc/rescue-web/config.json && systemctl restart rescue-web.service"
+
+bash ./lab verify 07
+
+bash ./lab reset
+for drill in 01 02 03 04 05 06 07; do
+  expect_no_active_drill "${drill}"
+done
+
 printf 'Smoke test passed for %s.\n' "${distro}"

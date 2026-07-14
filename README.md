@@ -5,7 +5,7 @@
 Diagnose and repair realistic Linux incidents on disposable servers you are
 allowed to break.
 
-> **Early build:** version 0.1.0-alpha.5 establishes the lab contract and ships three
+> **Early build:** version 0.1.0-alpha.6 establishes the lab contract and ships seven
 > complete rescue incidents. The wider curriculum is planned in
 > [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
 
@@ -13,8 +13,9 @@ allowed to break.
 
 - A selectable real systemd host called `relay`: Ubuntu, Debian or Rocky Linux.
 - The same lifecycle commands in Bash and PowerShell.
-- Complete service-failure, full-filesystem and DNS-shadowing drills with ordered hints,
-  self-verification and spoiler-fenced solutions.
+- Seven complete drills spanning services, storage, permissions, DNS, process
+  load and change recovery, each with ordered hints, self-verification and a
+  spoiler-fenced solution.
 - Loopback-only access to the sample service at <http://127.0.0.1:8100>.
 - Idempotent drill state that refuses to stack incidents.
 - A one-click Codespaces environment with a dedicated Docker daemon.
@@ -90,6 +91,10 @@ run `./lab verify 01` or `.\lab.ps1 verify 01`.
 | `01` | [Service failure](drills/01-service-failure.md) | Diagnose a systemd service trapped in a restart loop. |
 | `02` | [Full filesystem](drills/02-full-filesystem.md) | Find and recover the application filesystem that has no free space. |
 | `03` | [DNS ghost](drills/03-dns-ghost.md) | Find local name-service configuration shadowing the expected DNS answer. |
+| `04` | [Permission denied](drills/04-permission-denied.md) | Repair least-privilege access to application data. |
+| `05` | [Runaway process](drills/05-runaway-process.md) | Trace and stop a restart-managed CPU worker. |
+| `06` | [Invalid configuration](drills/06-invalid-configuration.md) | Validate and safely roll back malformed JSON. |
+| `07` | [Wrong listener](drills/07-wrong-listener.md) | Repair a service bound only to container loopback. |
 
 ## Command contract
 
@@ -136,6 +141,10 @@ targets, then start the next one with `up <distribution>`.
 Incident 02 mounts a size-limited 16 MiB tmpfs inside the container. It does
 not fill or mount the host filesystem. The tmpfs uses at most 16 MiB of the
 Docker host's memory or swap and disappears with the container.
+
+Incident 05 runs one deliberately busy worker under a systemd `CPUQuota` of
+20% of one CPU, a 32 MiB memory limit and a low scheduling priority. The worker
+exists only inside the disposable lab container and is removed by `lab reset`.
 
 ## Capability boundary
 

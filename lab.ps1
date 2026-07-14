@@ -93,6 +93,10 @@ function Resolve-Drill {
         { $_ -in @("01", "service-failure", "01-service-failure") } { return "01-service-failure" }
         { $_ -in @("02", "full-filesystem", "02-full-filesystem") } { return "02-full-filesystem" }
         { $_ -in @("03", "dns-ghost", "03-dns-ghost") } { return "03-dns-ghost" }
+        { $_ -in @("04", "permission-denied", "04-permission-denied") } { return "04-permission-denied" }
+        { $_ -in @("05", "runaway-process", "05-runaway-process") } { return "05-runaway-process" }
+        { $_ -in @("06", "invalid-configuration", "06-invalid-configuration") } { return "06-invalid-configuration" }
+        { $_ -in @("07", "wrong-listener", "07-wrong-listener") } { return "07-wrong-listener" }
         default { throw "Unknown drill '$Name'. Run .\lab.ps1 drills to see the available incidents." }
     }
 }
@@ -321,6 +325,10 @@ try {
             Write-Host "01  service-failure  Beginner  Diagnose a service trapped in a restart loop."
             Write-Host "02  full-filesystem  Beginner  Recover an application filesystem with no free space."
             Write-Host "03  dns-ghost       Intermediate  Find local configuration shadowing the expected DNS answer."
+            Write-Host "04  permission-denied  Beginner  Repair least-privilege access to application data."
+            Write-Host "05  runaway-process  Intermediate  Trace and stop a restart-managed CPU worker."
+            Write-Host "06  invalid-configuration  Intermediate  Validate and roll back malformed service configuration."
+            Write-Host "07  wrong-listener  Intermediate  Repair a service bound to the wrong network interface."
         }
         "distros" { Show-Distributions }
         { $_ -in @("shell", "ssh") } {

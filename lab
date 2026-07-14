@@ -94,6 +94,10 @@ normalise_drill() {
     01|service-failure|01-service-failure) printf '01-service-failure' ;;
     02|full-filesystem|02-full-filesystem) printf '02-full-filesystem' ;;
     03|dns-ghost|03-dns-ghost) printf '03-dns-ghost' ;;
+    04|permission-denied|04-permission-denied) printf '04-permission-denied' ;;
+    05|runaway-process|05-runaway-process) printf '05-runaway-process' ;;
+    06|invalid-configuration|06-invalid-configuration) printf '06-invalid-configuration' ;;
+    07|wrong-listener|07-wrong-listener) printf '07-wrong-listener' ;;
     *) fail "Unknown drill '${1:-}'. Run lab drills to see the available incidents." ;;
   esac
 }
@@ -289,6 +293,10 @@ drills() {
   printf '01  service-failure  Beginner  Diagnose a service trapped in a restart loop.\n'
   printf '02  full-filesystem  Beginner  Recover an application filesystem with no free space.\n'
   printf '03  dns-ghost       Intermediate  Find local configuration shadowing the expected DNS answer.\n'
+  printf '04  permission-denied  Beginner  Repair least-privilege access to application data.\n'
+  printf '05  runaway-process  Intermediate  Trace and stop a restart-managed CPU worker.\n'
+  printf '06  invalid-configuration  Intermediate  Validate and roll back malformed service configuration.\n'
+  printf '07  wrong-listener  Intermediate  Repair a service bound to the wrong network interface.\n'
 }
 
 distros() {
