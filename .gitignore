@@ -12,6 +12,8 @@ CLAUDE.md
 
 # Logs and editor state
 *.log
+__pycache__/
+*.py[cod]
 .DS_Store
 .idea/
 .vscode/

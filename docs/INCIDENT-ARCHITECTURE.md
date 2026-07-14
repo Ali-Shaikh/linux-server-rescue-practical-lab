@@ -51,10 +51,18 @@ The generic bootstrap performs these operations in order:
 4. Start systemd as PID 1.
 
 The wrappers resolve drill aliases from the shared catalogue. A catalogue entry
-may name a repository-relative Compose overlay. The wrapper accepts only an
-overlay listed in the catalogue, remembers it under ignored `.local/` state,
-and uses the same ordered Compose model for `up`, `down`, `reset`, `status` and
-`logs`.
+may name a repository-relative Compose overlay and the exact companion services
+that belong to it. The wrapper accepts only listed overlays and safe service
+names, remembers a committed overlay under ignored `.local/` state, and uses
+the same ordered Compose model for `up`, `down`, `reset`, `status` and `logs`.
+
+Scenario activation is transactional. The wrapper starts the companion before
+running the break script, but a failed break with no active drill removes only
+the catalogue-declared companion services and clears the uncommitted marker. A
+committed incident keeps its marker across `down` so `up` can restore the same
+Compose model. `reset` removes the scenario, state volume and marker. Startup
+also reconciles an interrupted activation whose marker exists without an active
+drill.
 
 Compose overlays are selected with ordered `-f` arguments. This preserves the
 documented Docker Compose 2.20.0 minimum. Compose `include` is not used because

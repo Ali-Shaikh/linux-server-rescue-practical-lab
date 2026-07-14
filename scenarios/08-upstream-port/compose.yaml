@@ -1,0 +1,36 @@
+services:
+  upstream-api:
+    container_name: lsr-upstream-api
+    image: busybox:1.38.0-musl
+    command: ["httpd", "-f", "-p", "9090", "-h", "/www"]
+    user: "65534:65534"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - type: bind
+        source: ./scenarios/08-upstream-port/www
+        target: /www
+        read_only: true
+    expose:
+      - "9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+    cpus: 0.10
+    mem_limit: 16m
+    pids_limit: 16
+    stop_grace_period: 5s
+    labels:
+      cloudsprocket.lab: rescue
+      cloudsprocket.role: upstream
+      cloudsprocket.scenario: 08-upstream-port
+    networks:
+      default:
+        aliases:
+          - upstream-api.internal

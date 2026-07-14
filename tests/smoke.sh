@@ -3,6 +3,10 @@ set -Eeuo pipefail
 
 readonly root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly distro="${1:-ubuntu}"
+readonly scenario_overlay="scenarios/08-upstream-port/compose.yaml"
+readonly upstream_health="scenarios/08-upstream-port/www/health"
+readonly upstream_health_backup="scenarios/08-upstream-port/www/health.smoke-backup"
+health_file_moved=0
 cd "${root_dir}"
 
 fail() {
@@ -11,8 +15,14 @@ fail() {
 }
 
 cleanup() {
+  if (( health_file_moved == 1 )) && [[ -f "${upstream_health_backup}" ]]; then
+    mv "${upstream_health_backup}" "${upstream_health}"
+    health_file_moved=0
+  fi
   LAB_DISTRO="${distro}" docker compose --project-name lsr --file compose.yaml \
+    --file "${scenario_overlay}" \
     down --volumes --remove-orphans >/dev/null 2>&1 || true
+  rm -f .local/active-scenario
 }
 
 expect_no_active_drill() {
@@ -30,6 +40,18 @@ expect_broken() {
   if bash ./lab verify "${drill}"; then
     fail "incident ${drill} unexpectedly passed verification"
   fi
+}
+
+wait_for_upstream() {
+  local health
+  for _ in {1..30}; do
+    health="$(docker container inspect --format \
+      '{{if .State.Health}}{{.State.Health.Status}}{{end}}' \
+      lsr-upstream-api 2>/dev/null || true)"
+    [[ "${health}" == "healthy" ]] && return 0
+    sleep 1
+  done
+  fail "the incident 08 upstream companion did not become healthy"
 }
 
 cleanup
@@ -236,7 +258,67 @@ MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
 bash ./lab verify 07
 
 bash ./lab reset
-for drill in 01 02 03 04 05 06 07; do
+for drill in 01 02 03 04 05 06 07 08; do
+  expect_no_active_drill "${drill}"
+done
+
+# A failed break after the companion starts must roll back both the service and
+# its ignored overlay marker without disturbing the healthy learner node.
+mv "${upstream_health}" "${upstream_health_backup}"
+health_file_moved=1
+set +e
+bash ./lab break 08
+failed_break_code=$?
+set -e
+mv "${upstream_health_backup}" "${upstream_health}"
+health_file_moved=0
+[[ ${failed_break_code} -ne 0 ]] \
+  || fail "incident 08 unexpectedly succeeded without its health response"
+[[ ! -f .local/active-scenario ]] \
+  || fail "failed incident 08 left an active scenario marker"
+if docker container inspect lsr-upstream-api >/dev/null 2>&1; then
+  fail "failed incident 08 left its upstream companion behind"
+fi
+expect_no_active_drill 08
+MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl is-active --quiet rescue-web.service \
+  || fail "failed incident 08 disturbed the learner service"
+
+bash ./lab break 08
+wait_for_upstream
+expect_broken 08
+MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl is-failed --quiet \
+  rescue-upstream-port-check.service \
+  || fail "incident 08 did not fail the upstream systemd probe"
+[[ "$(tr -d '\r\n' < .local/active-scenario)" == "${scenario_overlay}" ]] \
+  || fail "incident 08 did not save its scenario overlay"
+
+# Applying an already-active scenario incident must preserve the broken state.
+bash ./lab break 08
+expect_broken 08
+
+bash ./lab down
+if docker container inspect lsr-upstream-api >/dev/null 2>&1; then
+  fail "lab down did not stop and remove the upstream companion"
+fi
+bash ./lab up "${distro}"
+wait_for_upstream
+expect_broken 08
+MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl is-failed --quiet \
+  rescue-upstream-port-check.service \
+  || fail "incident 08 was not restored after container recreation"
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "install -o root -g root -m 0644 /etc/rescue-upstream-port.conf.last-known-good /etc/rescue-upstream-port.conf && systemctl reset-failed rescue-upstream-port-check.service && systemctl restart rescue-upstream-port-check.service"
+
+bash ./lab verify 08
+
+bash ./lab reset
+[[ ! -f .local/active-scenario ]] \
+  || fail "lab reset left the incident 08 scenario marker behind"
+if docker container inspect lsr-upstream-api >/dev/null 2>&1; then
+  fail "lab reset left the incident 08 upstream companion behind"
+fi
+for drill in 01 02 03 04 05 06 07 08; do
   expect_no_active_drill "${drill}"
 done
 
