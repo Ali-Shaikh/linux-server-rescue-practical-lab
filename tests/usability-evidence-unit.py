@@ -7,6 +7,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).with_name("usability-evidence.py")
@@ -63,6 +64,29 @@ class LimitTests(unittest.TestCase):
     def test_memory_limit_boundary(self) -> None:
         self.assertTrue(MODULE.within_memory_limit(4 * 1024**3))
         self.assertFalse(MODULE.within_memory_limit(4 * 1024**3 + 1))
+
+
+class OwnershipTests(unittest.TestCase):
+    def test_empty_project_can_be_claimed(self) -> None:
+        with patch.object(
+            MODULE,
+            "list_lsr_resources",
+            return_value={"containers": [], "volumes": [], "networks": []},
+        ):
+            MODULE.claim_clean_lsr_project(Path("."))
+
+    def test_existing_state_is_refused(self) -> None:
+        with patch.object(
+            MODULE,
+            "list_lsr_resources",
+            return_value={
+                "containers": ["lsr-relay"],
+                "volumes": ["lsr-ubuntu-state"],
+                "networks": [],
+            },
+        ):
+            with self.assertRaisesRegex(RuntimeError, "not owned"):
+                MODULE.claim_clean_lsr_project(Path("."))
 
 
 if __name__ == "__main__":

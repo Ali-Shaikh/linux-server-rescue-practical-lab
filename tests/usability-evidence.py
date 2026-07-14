@@ -77,6 +77,35 @@ def command_output(command: list[str], *, root: Path) -> str:
     return run(command, root=root, capture_output=True).stdout.strip()
 
 
+def list_lsr_resources(root: Path) -> dict[str, list[str]]:
+    commands = {
+        "containers": ["docker", "ps", "--all", "--format", "{{.Names}}"],
+        "volumes": ["docker", "volume", "ls", "--format", "{{.Name}}"],
+        "networks": ["docker", "network", "ls", "--format", "{{.Name}}"],
+    }
+    resources: dict[str, list[str]] = {}
+    for resource_type, command in commands.items():
+        names = command_output(command, root=root).splitlines()
+        resources[resource_type] = sorted(
+            name for name in names if name == "lsr" or name.startswith("lsr-")
+        )
+    return resources
+
+
+def claim_clean_lsr_project(root: Path) -> None:
+    resources = list_lsr_resources(root)
+    occupied = [
+        f"{resource_type}: {', '.join(names)}"
+        for resource_type, names in resources.items()
+        if names
+    ]
+    if occupied:
+        raise RuntimeError(
+            "Refusing to run because existing lsr resources are not owned by this "
+            f"measurement: {'; '.join(occupied)}"
+        )
+
+
 class DockerStatsSampler:
     """Sample total memory for running containers owned by this lab."""
 
@@ -357,9 +386,12 @@ def main() -> int:
         },
     }
     errors: list[str] = []
+    owns_lsr_project = False
 
     try:
         report["runner"] = collect_runner_context(root)
+        claim_clean_lsr_project(root)
+        owns_lsr_project = True
         report["quick_start"] = run_quick_start(root, args.started_at)
         resources, suite_exit_code = run_resource_suite(root)
         report["resources"] = resources
@@ -369,10 +401,11 @@ def main() -> int:
             errors.append("Fresh-clone command path exceeded 600 seconds")
         if not resources["passed"]:
             errors.append("Resource evidence did not satisfy the 4 GiB contract")
-    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+    except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as error:
         errors.append(str(error))
     finally:
-        cleanup(root)
+        if owns_lsr_project:
+            cleanup(root)
 
     report["errors"] = errors
     report["passed"] = not errors

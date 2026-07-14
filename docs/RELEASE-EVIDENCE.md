@@ -22,7 +22,11 @@ results to the GitHub Actions job summary.
 
 The workflow is read-only. It receives no repository secrets, publishes no
 images and keeps generated evidence in runner storage rather than the source
-tree.
+tree. Pull requests from forks do not run the Docker evidence job; a maintainer
+must place the revision on a trusted repository branch or run the gate after
+merge. Before creating anything, the harness also refuses to run when an
+existing container, volume or network uses the `lsr` project prefix. Cleanup is
+enabled only after that ownership check succeeds.
 
 ## Evidence boundary
 

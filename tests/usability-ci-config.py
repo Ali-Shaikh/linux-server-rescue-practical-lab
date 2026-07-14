@@ -34,6 +34,15 @@ require("runner.temp" in text, "machine-readable evidence is not kept in runner 
 require("retention-days: 30" in text, "evidence retention is not bounded")
 require("if: always()" in text, "failed evidence is not retained for diagnosis")
 require(
+    "if: github.event_name != 'pull_request' || "
+    "github.event.pull_request.head.repo.full_name == github.repository" in text,
+    "fork pull requests can execute the Docker evidence job",
+)
+require(
+    "SOURCE_REPOSITORY: ${{ github.repository }}" in text,
+    "workflow can clone a contributor-controlled fork",
+)
+require(
     re.search(
         r"(?mi)^(?!\s*#)(?:.*\$\{\{[^}\n]*\bsecrets(?:\.|\[)|\s*secrets\s*:)",
         text,
