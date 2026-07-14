@@ -5,7 +5,7 @@
 Diagnose and repair realistic Linux incidents on disposable servers you are
 allowed to break.
 
-> **Early build:** version 0.1.0-alpha.7 establishes the lab contract and ships seven
+> **Early build:** version 0.1.0-alpha.8 establishes the lab contract and ships eight
 > complete rescue incidents. The wider curriculum is planned in
 > [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
 
@@ -13,9 +13,9 @@ allowed to break.
 
 - A selectable real systemd host called `relay`: Ubuntu, Debian or Rocky Linux.
 - The same lifecycle commands in Bash and PowerShell.
-- Seven complete drills spanning services, storage, permissions, DNS, process
-  load and change recovery, each with ordered hints, self-verification and a
-  spoiler-fenced solution.
+- Eight complete drills spanning services, storage, permissions, DNS, process
+  load, networking and change recovery, each with ordered hints,
+  self-verification and a spoiler-fenced solution.
 - Loopback-only access to the sample service at <http://127.0.0.1:8100>.
 - Idempotent drill state that refuses to stack incidents.
 - Stable learner-node images with public incident content mounted read-only from
@@ -97,6 +97,7 @@ run `./lab verify 01` or `.\lab.ps1 verify 01`.
 | `05` | [Runaway process](drills/05-runaway-process.md) | Trace and stop a restart-managed CPU worker. |
 | `06` | [Invalid configuration](drills/06-invalid-configuration.md) | Validate and safely roll back malformed JSON. |
 | `07` | [Wrong listener](drills/07-wrong-listener.md) | Repair a service bound only to container loopback. |
+| `08` | [Upstream port](drills/08-upstream-port.md) | Restore a systemd probe using the wrong external upstream port. |
 
 ## Command contract
 
@@ -153,6 +154,12 @@ Incident 05 runs one deliberately busy worker under a systemd `CPUQuota` of
 20% of one CPU, a 32 MiB memory limit and a low scheduling priority. The worker
 exists only inside the disposable lab container and is removed by `lab reset`.
 
+Incident 08 adds a purpose-built BusyBox companion on the internal Compose
+network. It runs as an unprivileged user with all Linux capabilities dropped, a
+read-only root filesystem, no host port, a health check and explicit CPU,
+memory and process limits. A failed break removes the uncommitted companion;
+`down` and `up` preserve a committed incident, while `reset` removes it.
+
 ## Capability boundary
 
 The current Docker backend teaches service, log, process, storage, permission,
@@ -165,8 +172,8 @@ VM-backed track.
 Rocky Linux provides RHEL-compatible behaviour but does not include a Red Hat
 subscription, Red Hat support or restricted RHEL content.
 
-Once the learner image has been built, the checked-out lab and its exercises
-work offline.
+Once the learner and pinned companion images have been downloaded or built,
+the checked-out lab and its exercises work offline.
 
 ## Licence and trademarks
 

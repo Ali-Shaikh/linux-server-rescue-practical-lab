@@ -1,6 +1,6 @@
 # Linux Server Rescue curriculum
 
-Status: seven complete incident slices in build, 2026-07-13.
+Status: eight complete incident slices in build, 2026-07-14.
 
 ## Learning promise
 
@@ -36,7 +36,7 @@ so an incident may implement a later curriculum stage first.
 | 1 | Services and logs | Bad systemd override, restart loop, stale dependency | Docker | First incident implemented |
 | 2 | Capacity | Full filesystem, deleted-open file, exhausted inodes | Docker | Full-filesystem incident implemented |
 | 3 | Identity and access | Wrong ownership, broken sudo rule, locked service account | Docker | Permission incident implemented |
-| 4 | Networking and DNS | Wrong listener, bad resolver, shadowed hosts entry | Docker | DNS shadow and listener incidents implemented |
+| 4 | Networking and DNS | Wrong listener, bad resolver, shadowed hosts entry, failed upstream | Docker | DNS, listener and external-upstream incidents implemented |
 | 5 | Processes and performance | Runaway process, memory pressure, file descriptor exhaustion | Docker | Runaway process incident implemented |
 | 6 | Change recovery | Invalid configuration, failed package transition, unsafe rollback | Docker | Configuration rollback incident implemented |
 | 7 | Boot and block storage | Broken fstab, initramfs, bootloader and filesystem recovery | VM | Later track |
@@ -69,6 +69,8 @@ That target is complete. The current alpha also includes:
 - `05-runaway-process`: a systemd-managed worker consumes bounded CPU.
 - `06-invalid-configuration`: malformed JSON requires validation and rollback.
 - `07-wrong-listener`: loopback binding breaks the published network path.
+- `08-upstream-port`: a systemd probe targets the wrong port on a real external
+  companion service.
 
 Release acceptance requires both wrappers, the full incident loop on every
 supported distribution, amd64 and arm64 image builds, restart resilience, and

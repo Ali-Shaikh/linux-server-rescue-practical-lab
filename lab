@@ -127,8 +127,27 @@ drill_record() {
 drill_overlay() {
   local record overlay
   record="$(drill_record "$1")" || return 1
-  IFS=$'\t' read -r _ _ _ _ overlay _ <<< "${record}"
+  IFS=$'\t' read -r _ _ _ _ overlay _ _ <<< "${record}"
   [[ "${overlay}" == "none" ]] || printf '%s' "${overlay}"
+}
+
+drill_services() {
+  local record services
+  record="$(drill_record "$1")" || return 1
+  IFS=$'\t' read -r _ _ _ _ _ services _ <<< "${record}"
+  [[ "${services}" == "none" ]] || printf '%s' "${services}"
+}
+
+drill_for_overlay() {
+  local overlay="$1"
+  awk -F '\t' -v overlay="${overlay}" '
+    NR > 1 && $5 == overlay {
+      print $1 "-" $2
+      found = 1
+      exit
+    }
+    END { if (!found) exit 1 }
+  ' "${drill_catalog}"
 }
 
 validate_overlay() {
@@ -169,6 +188,80 @@ save_active_overlay() {
 clear_active_overlay() {
   rm -f "${active_scenario_file}"
   lab_overlay=""
+}
+
+current_active_drill() {
+  docker_exec "${container_name}" sh -c \
+    'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true' \
+    2>/dev/null || true
+}
+
+cleanup_scenario_services() {
+  local drill="$1" raw_services service
+  local -a services
+
+  raw_services="$(drill_services "${drill}")" || return 1
+  [[ -n "${raw_services}" ]] || return 0
+  IFS=',' read -r -a services <<< "${raw_services}"
+  for service in "${services[@]}"; do
+    [[ "${service}" =~ ^[a-z0-9][a-z0-9-]*$ ]] \
+      || fail "Scenario service '${service}' is not a safe Compose service name."
+  done
+
+  compose rm --stop --force "${services[@]}"
+}
+
+restore_overlay_context() {
+  local previous_overlay="$1"
+  if [[ -n "${previous_overlay}" ]]; then
+    set_overlay_context "${previous_overlay}"
+    save_active_overlay
+  else
+    clear_active_overlay
+  fi
+}
+
+rollback_scenario_activation() {
+  local drill="$1" previous_overlay="$2"
+
+  if cleanup_scenario_services "${drill}"; then
+    restore_overlay_context "${previous_overlay}"
+    return 0
+  fi
+
+  save_active_overlay || true
+  printf 'WARN: scenario cleanup failed; overlay state was retained for lab reset.\n' >&2
+  return 1
+}
+
+reconcile_overlay_state() {
+  local active expected_overlay overlay_drill
+  active="$(current_active_drill)"
+
+  if [[ -z "${lab_overlay}" ]]; then
+    if [[ -n "${active}" ]]; then
+      expected_overlay="$(drill_overlay "${active}")" \
+        || fail "Saved drill '${active}' is not listed in the drill catalogue."
+      [[ -z "${expected_overlay}" ]] \
+        || fail "Saved drill ${active} requires a missing scenario overlay. Run lab reset."
+    fi
+    return 0
+  fi
+
+  overlay_drill="$(drill_for_overlay "${lab_overlay}")" \
+    || fail "Scenario overlay ${lab_overlay} is not assigned to a drill."
+  if [[ -z "${active}" ]]; then
+    printf 'Cleaning up an uncommitted scenario for %s...\n' "${overlay_drill}"
+    cleanup_scenario_services "${overlay_drill}" \
+      || fail "The uncommitted scenario could not be cleaned up. Run lab reset."
+    clear_active_overlay
+    return 0
+  fi
+
+  expected_overlay="$(drill_overlay "${active}")" \
+    || fail "Saved drill '${active}' is not listed in the drill catalogue."
+  [[ "${expected_overlay}" == "${lab_overlay}" ]] \
+    || fail "Saved drill ${active} and scenario overlay ${lab_overlay} are inconsistent. Run lab reset."
 }
 
 version_at_least() {
@@ -271,7 +364,7 @@ wait_for_lab_ready() {
   done
 
   compose ps
-  fail "The lab did not reach a ready or diagnosable incident state."
+  return 1
 }
 
 up() {
@@ -288,8 +381,11 @@ up() {
   set_distro_context "${requested}"
   doctor
   printf '\nBuilding and starting %s...\n' "$(distro_display "${lab_distro}")"
-  compose up --build --detach
-  wait_for_lab_ready
+  compose up --build --detach \
+    || fail "Docker Compose could not start the lab."
+  wait_for_lab_ready \
+    || fail "The lab did not reach a ready or diagnosable incident state."
+  reconcile_overlay_state
   save_selected_distro
   status
 }
@@ -340,12 +436,12 @@ status() {
 }
 
 run_break() {
-  local drill overlay active previous_overlay
+  local drill overlay active current_active previous_overlay
   require_running
+  reconcile_overlay_state
   drill="$(normalise_drill "${1:-}")"
   overlay="$(drill_overlay "${drill}")"
-  active="$(docker_exec "${container_name}" sh -c \
-    'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true')"
+  active="$(current_active_drill)"
 
   if [[ -n "${active}" && "${active}" != "${drill}" ]]; then
     fail "Cannot start ${drill} while ${active} is active. Run lab reset first."
@@ -357,18 +453,34 @@ run_break() {
     fi
     previous_overlay="${lab_overlay}"
     set_overlay_context "${overlay}"
+    if ! save_active_overlay; then
+      restore_overlay_context "${previous_overlay}" || true
+      fail "Scenario state for ${drill} could not be saved."
+    fi
     if ! compose up --build --detach; then
-      set_overlay_context "${previous_overlay}"
+      if [[ -z "${active}" ]]; then
+        rollback_scenario_activation "${drill}" "${previous_overlay}" || true
+      fi
       fail "The scenario services for ${drill} could not be started."
     fi
-    save_active_overlay
-    wait_for_lab_ready
+    if ! wait_for_lab_ready; then
+      if [[ -z "${active}" ]]; then
+        rollback_scenario_activation "${drill}" "${previous_overlay}" || true
+      fi
+      fail "The lab did not reach a ready state while starting ${drill}."
+    fi
   elif [[ -n "${lab_overlay}" ]]; then
     fail "Scenario overlay ${lab_overlay} is active. Run lab reset first."
   fi
 
-  docker_exec --user root "${container_name}" \
-    bash "/opt/lab/drills/break/${drill}.sh"
+  if ! docker_exec --user root "${container_name}" \
+    bash "/opt/lab/drills/break/${drill}.sh"; then
+    current_active="$(current_active_drill)"
+    if [[ -n "${overlay}" && -z "${active}" && -z "${current_active}" ]]; then
+      rollback_scenario_activation "${drill}" "${previous_overlay}" || true
+    fi
+    fail "The incident could not be applied."
+  fi
 }
 
 run_verify() {
@@ -390,8 +502,8 @@ run_check() {
 }
 
 drills() {
-  local drill_id slug difficulty scope overlay description
-  while IFS=$'\t' read -r drill_id slug difficulty scope overlay description; do
+  local drill_id slug difficulty scope overlay services description
+  while IFS=$'\t' read -r drill_id slug difficulty scope overlay services description; do
     [[ "${drill_id}" == "id" ]] && continue
     printf '%-2s  %-22s  %-12s  %s\n' \
       "${drill_id}" "${slug}" "${difficulty}" "${description}"

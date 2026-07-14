@@ -134,6 +134,33 @@ function Get-DrillOverlay {
     return $record.overlay
 }
 
+function Get-DrillServices {
+    param([string]$ResolvedName)
+
+    $record = $script:DrillCatalog | Where-Object {
+        "$($_.id)-$($_.slug)" -eq $ResolvedName
+    } | Select-Object -First 1
+    if (-not $record) { throw "Drill '$ResolvedName' is missing from the catalogue." }
+    if ($record.services -eq "none") { return @() }
+
+    $services = @($record.services -split ',')
+    foreach ($service in $services) {
+        if ($service -notmatch '^[a-z0-9][a-z0-9-]*$') {
+            throw "Scenario service '$service' is not a safe Compose service name."
+        }
+    }
+    return $services
+}
+
+function Get-DrillForOverlay {
+    param([string]$Overlay)
+
+    $record = $script:DrillCatalog | Where-Object { $_.overlay -eq $Overlay } |
+        Select-Object -First 1
+    if (-not $record) { throw "Scenario overlay $Overlay is not assigned to a drill." }
+    return "$($record.id)-$($record.slug)"
+}
+
 function Assert-SafeScenarioOverlay {
     param([string]$Overlay)
 
@@ -172,6 +199,78 @@ function Save-ScenarioOverlay {
 function Clear-ScenarioOverlay {
     Remove-Item -LiteralPath $ActiveScenarioFile -Force -ErrorAction SilentlyContinue
     $script:LabOverlay = ""
+}
+
+function Get-ActiveDrill {
+    $active = [string](& docker exec $ContainerName sh -c 'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true' 2>$null)
+    return $active.Trim()
+}
+
+function Remove-ScenarioServices {
+    param([string]$Drill)
+
+    $services = @(Get-DrillServices $Drill)
+    if ($services.Count -eq 0) { return }
+    Invoke-LabCompose rm --stop --force @services
+    if ($LASTEXITCODE -ne 0) {
+        throw "The scenario services for $Drill could not be removed."
+    }
+}
+
+function Restore-ScenarioContext {
+    param([string]$PreviousOverlay)
+
+    if ($PreviousOverlay) {
+        Set-ScenarioContext $PreviousOverlay
+        Save-ScenarioOverlay
+    }
+    else {
+        Clear-ScenarioOverlay
+    }
+}
+
+function Undo-ScenarioActivation {
+    param(
+        [string]$Drill,
+        [string]$PreviousOverlay
+    )
+
+    try {
+        Remove-ScenarioServices $Drill
+        Restore-ScenarioContext $PreviousOverlay
+        return $true
+    }
+    catch {
+        try { Save-ScenarioOverlay } catch { }
+        Write-Warning "Scenario cleanup failed; overlay state was retained for .\lab.ps1 reset."
+        return $false
+    }
+}
+
+function Sync-ScenarioState {
+    $active = Get-ActiveDrill
+    if (-not $script:LabOverlay) {
+        if ($active) {
+            $expectedOverlay = Get-DrillOverlay $active
+            if ($expectedOverlay) {
+                throw "Saved drill $active requires a missing scenario overlay. Run .\lab.ps1 reset."
+            }
+        }
+        return
+    }
+
+    $overlayDrill = Get-DrillForOverlay $script:LabOverlay
+    if (-not $active) {
+        Write-Host "Cleaning up an uncommitted scenario for $overlayDrill..."
+        Remove-ScenarioServices $overlayDrill
+        Clear-ScenarioOverlay
+        return
+    }
+
+    $expectedOverlay = Get-DrillOverlay $active
+    if ($expectedOverlay -ne $script:LabOverlay) {
+        throw "Saved drill $active and scenario overlay $script:LabOverlay are inconsistent. Run .\lab.ps1 reset."
+    }
 }
 
 function Invoke-Doctor {
@@ -307,6 +406,7 @@ function Start-Lab {
     Invoke-LabCompose up --build --detach
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose could not start the lab." }
     Wait-LabReady
+    Sync-ScenarioState
     Save-SelectedDistro
     Show-Status
 }
@@ -332,10 +432,11 @@ function Reset-Lab {
 function Invoke-Break {
     param([string]$Name)
     Assert-Running
+    Sync-ScenarioState
     $drill = Resolve-Drill $Name
     $overlay = Get-DrillOverlay $drill
-    $active = [string](& docker exec $ContainerName sh -c 'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true')
-    $active = $active.Trim()
+    $active = Get-ActiveDrill
+    $previousOverlay = ""
 
     if ($active -and $active -ne $drill) {
         throw "Cannot start $drill while $active is active. Run .\lab.ps1 reset first."
@@ -347,20 +448,42 @@ function Invoke-Break {
         }
         $previousOverlay = $script:LabOverlay
         Set-ScenarioContext $overlay
+        try {
+            Save-ScenarioOverlay
+        }
+        catch {
+            Restore-ScenarioContext $previousOverlay
+            throw "Scenario state for $drill could not be saved."
+        }
         Invoke-LabCompose up --build --detach
         if ($LASTEXITCODE -ne 0) {
-            Set-ScenarioContext $previousOverlay
+            if (-not $active) {
+                $null = Undo-ScenarioActivation $drill $previousOverlay
+            }
             throw "The scenario services for $drill could not be started."
         }
-        Save-ScenarioOverlay
-        Wait-LabReady
+        try {
+            Wait-LabReady
+        }
+        catch {
+            if (-not $active) {
+                $null = Undo-ScenarioActivation $drill $previousOverlay
+            }
+            throw "The lab did not reach a ready state while starting $drill."
+        }
     }
     elseif ($script:LabOverlay) {
         throw "Scenario overlay $script:LabOverlay is active. Run .\lab.ps1 reset first."
     }
 
     & docker exec --user root $ContainerName bash "/opt/lab/drills/break/$drill.sh"
-    if ($LASTEXITCODE -ne 0) { throw "The incident could not be applied." }
+    if ($LASTEXITCODE -ne 0) {
+        $currentActive = Get-ActiveDrill
+        if ($overlay -and -not $active -and -not $currentActive) {
+            $null = Undo-ScenarioActivation $drill $previousOverlay
+        }
+        throw "The incident could not be applied."
+    }
 }
 
 function Invoke-Verify {
