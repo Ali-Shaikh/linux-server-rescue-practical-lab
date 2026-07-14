@@ -17,9 +17,11 @@ container; `latest` keeps that engine on the feature's supported current
 release.
 
 Docker-in-Docker provides a dedicated Docker daemon inside the development
-container. The repository does not mount a host Docker socket, home directory,
-SSH keys or host filesystem into the lab. Port 8100 is forwarded privately and
-is accessible only to the signed-in codespace owner unless they deliberately
+container. The learner node receives only the checked-out repository's public
+`runtime`, `drills` and `checks` directories as read-only bind mounts. It does
+not receive the repository root, Git metadata, local state, environment files,
+a Docker socket, a home directory or SSH keys. Port 8100 is forwarded privately
+and is accessible only to the signed-in codespace owner unless they deliberately
 change its visibility.
 
 The configuration does not build or start a lab automatically. Its

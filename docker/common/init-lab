@@ -2,53 +2,24 @@
 set -Eeuo pipefail
 
 readonly active_file="/var/lib/cloudsprocket-lab/active-drill"
-readonly override_dir="/etc/systemd/system/rescue-web.service.d"
+readonly runtime_installer="/opt/lab/runtime/install.sh"
+readonly restore_dir="/opt/lab/drills/restore"
 
-restore_service_failure() {
-  mkdir -p "${override_dir}"
-  cat > "${override_dir}/override.conf" <<'EOF'
-[Service]
-Environment=APP_PORT=not-a-port
-EOF
-}
+if [[ ! -f "${runtime_installer}" ]]; then
+  printf 'ERROR: mounted runtime installer is missing: %s\n' "${runtime_installer}" >&2
+  exit 1
+fi
 
-restore_full_filesystem() {
-  systemctl enable rescue-data-volume.service >/dev/null
-}
-
-restore_dns_ghost() {
-  /opt/lab/drills/fixtures/03-dns-ghost.sh
-  systemctl enable rescue-upstream-check.service >/dev/null
-}
-
-restore_permission_denied() {
-  /opt/lab/drills/fixtures/04-permission-denied.sh
-}
-
-restore_runaway_process() {
-  systemctl enable rescue-cpu-hog.service >/dev/null
-}
-
-restore_invalid_configuration() {
-  /opt/lab/drills/fixtures/06-invalid-configuration.sh
-}
-
-restore_wrong_listener() {
-  /opt/lab/drills/fixtures/07-wrong-listener.sh
-}
+bash "${runtime_installer}"
 
 if [[ -f "${active_file}" ]]; then
   active_drill="$(<"${active_file}")"
-  case "${active_drill}" in
-    01-service-failure) restore_service_failure ;;
-    02-full-filesystem) restore_full_filesystem ;;
-    03-dns-ghost) restore_dns_ghost ;;
-    04-permission-denied) restore_permission_denied ;;
-    05-runaway-process) restore_runaway_process ;;
-    06-invalid-configuration) restore_invalid_configuration ;;
-    07-wrong-listener) restore_wrong_listener ;;
-    *) printf 'WARN: unknown saved drill %s was not restored.\n' "${active_drill}" >&2 ;;
-  esac
+  if [[ "${active_drill}" =~ ^[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$ ]] \
+    && [[ -f "${restore_dir}/${active_drill}.sh" ]]; then
+    bash "${restore_dir}/${active_drill}.sh"
+  else
+    printf 'WARN: unknown saved drill %s was not restored.\n' "${active_drill}" >&2
+  fi
 fi
 
 exec /sbin/init

@@ -18,6 +18,18 @@ services:
       - /run/lock
       - /tmp
     volumes:
+      - type: bind
+        source: ./runtime
+        target: /opt/lab/runtime
+        read_only: true
+      - type: bind
+        source: ./drills
+        target: /opt/lab/drills
+        read_only: true
+      - type: bind
+        source: ./checks
+        target: /opt/lab/checks
+        read_only: true
       - type: volume
         source: state
         target: /var/lib/cloudsprocket-lab

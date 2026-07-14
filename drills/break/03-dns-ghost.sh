@@ -33,7 +33,7 @@ if [[ -f "${active_file}" ]]; then
   exit 1
 fi
 
-/opt/lab/drills/fixtures/03-dns-ghost.sh
+bash /opt/lab/drills/fixtures/03-dns-ghost.sh
 systemctl enable rescue-upstream-check.service >/dev/null
 systemctl restart rescue-upstream-check.service >/dev/null 2>&1 || true
 

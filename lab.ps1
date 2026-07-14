@@ -13,7 +13,11 @@ $ProjectName = "lsr"
 $ContainerName = "lsr-relay"
 $RequiredCompose = [version]"2.20.0"
 $SelectedDistroFile = Join-Path $RootDirectory ".local\active-distro"
+$ActiveScenarioFile = Join-Path $RootDirectory ".local\active-scenario"
+$DrillCatalogPath = Join-Path $RootDirectory "drills\catalog.tsv"
 $script:LabDistro = "ubuntu"
+$script:LabOverlay = ""
+$script:DrillCatalog = @(Import-Csv -LiteralPath $DrillCatalogPath -Delimiter "`t")
 
 function Resolve-LabDistro {
     param([string]$Name)
@@ -49,6 +53,24 @@ function Set-DistroContext {
 
     $script:LabDistro = Resolve-LabDistro $Name
     $env:LAB_DISTRO = $script:LabDistro
+}
+
+function Invoke-LabCompose {
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$ComposeArguments
+    )
+
+    $dockerArguments = @(
+        "compose",
+        "--project-name", $ProjectName,
+        "--file", (Join-Path $RootDirectory "compose.yaml")
+    )
+    if ($script:LabOverlay) {
+        $dockerArguments += @("--file", (Join-Path $RootDirectory $script:LabOverlay))
+    }
+    $dockerArguments += $ComposeArguments
+    & docker @dockerArguments
 }
 
 function Save-SelectedDistro {
@@ -89,16 +111,67 @@ function Assert-Running {
 function Resolve-Drill {
     param([string]$Name)
 
-    switch ($Name) {
-        { $_ -in @("01", "service-failure", "01-service-failure") } { return "01-service-failure" }
-        { $_ -in @("02", "full-filesystem", "02-full-filesystem") } { return "02-full-filesystem" }
-        { $_ -in @("03", "dns-ghost", "03-dns-ghost") } { return "03-dns-ghost" }
-        { $_ -in @("04", "permission-denied", "04-permission-denied") } { return "04-permission-denied" }
-        { $_ -in @("05", "runaway-process", "05-runaway-process") } { return "05-runaway-process" }
-        { $_ -in @("06", "invalid-configuration", "06-invalid-configuration") } { return "06-invalid-configuration" }
-        { $_ -in @("07", "wrong-listener", "07-wrong-listener") } { return "07-wrong-listener" }
-        default { throw "Unknown drill '$Name'. Run .\lab.ps1 drills to see the available incidents." }
+    $query = $Name.ToLowerInvariant()
+    $record = $script:DrillCatalog | Where-Object {
+        $fullId = "$($_.id)-$($_.slug)"
+        $query -in @($_.id, $_.slug, $fullId)
+    } | Select-Object -First 1
+
+    if (-not $record) {
+        throw "Unknown drill '$Name'. Run .\lab.ps1 drills to see the available incidents."
     }
+    return "$($record.id)-$($record.slug)"
+}
+
+function Get-DrillOverlay {
+    param([string]$ResolvedName)
+
+    $record = $script:DrillCatalog | Where-Object {
+        "$($_.id)-$($_.slug)" -eq $ResolvedName
+    } | Select-Object -First 1
+    if (-not $record) { throw "Drill '$ResolvedName' is missing from the catalogue." }
+    if ($record.overlay -eq "none") { return "" }
+    return $record.overlay
+}
+
+function Assert-SafeScenarioOverlay {
+    param([string]$Overlay)
+
+    if ($Overlay -notmatch '^scenarios/[a-z0-9][a-z0-9-]*/compose\.yaml$' -or $Overlay.Contains("..")) {
+        throw "Scenario overlay '$Overlay' is not a safe repository path."
+    }
+    if (-not ($script:DrillCatalog | Where-Object { $_.overlay -eq $Overlay })) {
+        throw "Scenario overlay '$Overlay' is not listed in the drill catalogue."
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $RootDirectory $Overlay) -PathType Leaf)) {
+        throw "Scenario overlay '$Overlay' does not exist."
+    }
+}
+
+function Set-ScenarioContext {
+    param([string]$Overlay)
+
+    if ($Overlay) { Assert-SafeScenarioOverlay $Overlay }
+    $script:LabOverlay = $Overlay
+}
+
+function Get-SavedScenarioOverlay {
+    if (-not (Test-Path -LiteralPath $ActiveScenarioFile -PathType Leaf)) { return "" }
+    $stored = (Get-Content -Raw -LiteralPath $ActiveScenarioFile).Trim()
+    if (-not $stored) { return "" }
+    Assert-SafeScenarioOverlay $stored
+    return $stored
+}
+
+function Save-ScenarioOverlay {
+    $directory = Split-Path -Parent $ActiveScenarioFile
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    Set-Content -LiteralPath $ActiveScenarioFile -Value $script:LabOverlay -NoNewline
+}
+
+function Clear-ScenarioOverlay {
+    Remove-Item -LiteralPath $ActiveScenarioFile -Force -ErrorAction SilentlyContinue
+    $script:LabOverlay = ""
 }
 
 function Invoke-Doctor {
@@ -162,7 +235,7 @@ function Invoke-Doctor {
     }
 
     Write-Host "WARN  This lab uses a privileged container for real systemd. It is not a security boundary."
-    Write-Host "      It mounts no Docker socket, host filesystem, home directory or SSH keys."
+    Write-Host "      It mounts only public lab content read-only; no Docker socket, home directory or SSH keys."
 
     if ($failures -eq 0) {
         Write-Host "`nDoctor found no blocking problems."
@@ -174,12 +247,13 @@ function Show-Status {
     if (-not (Test-ContainerExists)) {
         Write-Host "Linux Server Rescue is down. Selected distribution: $(Get-DistroDisplay $script:LabDistro)."
         Write-Host "Start it with .\lab.ps1 up, or choose another target with .\lab.ps1 up <distribution>."
+        Write-Host "Scenario overlay: $(if ($script:LabOverlay) { $script:LabOverlay } else { 'none' })"
         return
     }
 
     $actual = Get-ContainerDistro
     if ($actual) { Set-DistroContext $actual }
-    & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") ps
+    Invoke-LabCompose ps
     Write-Host "`nDistribution: $(Get-DistroDisplay $script:LabDistro) ($script:LabDistro)"
     Write-Host "Service URL: http://127.0.0.1:8100"
     if (Test-ContainerRunning) {
@@ -189,6 +263,7 @@ function Show-Status {
     else {
         Write-Host "Container is stopped. lab up will recover it; lab reset will recreate it."
     }
+    Write-Host "Scenario overlay: $(if ($script:LabOverlay) { $script:LabOverlay } else { 'none' })"
 }
 
 function Wait-LabReady {
@@ -211,7 +286,7 @@ function Wait-LabReady {
         Start-Sleep -Seconds 1
     }
 
-    & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") ps
+    Invoke-LabCompose ps
     throw "The lab did not reach a ready or diagnosable incident state."
 }
 
@@ -229,7 +304,7 @@ function Start-Lab {
     Set-DistroContext $requested
     if ((Invoke-Doctor) -ne 0) { throw "Doctor found blocking problems." }
     Write-Host "`nBuilding and starting $(Get-DistroDisplay $script:LabDistro)..."
-    & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") up --build --detach
+    Invoke-LabCompose up --build --detach
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose could not start the lab." }
     Wait-LabReady
     Save-SelectedDistro
@@ -239,7 +314,7 @@ function Start-Lab {
 function Stop-Lab {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker was not found." }
     Use-ContainerDistro
-    & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") down --remove-orphans
+    Invoke-LabCompose down --remove-orphans
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose could not stop the lab." }
     Write-Host "Linux Server Rescue is down. $(Get-DistroDisplay $script:LabDistro) drill state is preserved; lab reset clears it."
 }
@@ -248,8 +323,9 @@ function Reset-Lab {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker was not found." }
     Use-ContainerDistro
     Write-Host "Removing only $(Get-DistroDisplay $script:LabDistro) resources in the $ProjectName Compose project, including its state volume..."
-    & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") down --volumes --remove-orphans
+    Invoke-LabCompose down --volumes --remove-orphans
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose could not clear the lab." }
+    Clear-ScenarioOverlay
     Start-Lab $script:LabDistro
 }
 
@@ -257,7 +333,33 @@ function Invoke-Break {
     param([string]$Name)
     Assert-Running
     $drill = Resolve-Drill $Name
-    & docker exec --user root $ContainerName "/opt/lab/drills/break/$drill.sh"
+    $overlay = Get-DrillOverlay $drill
+    $active = [string](& docker exec $ContainerName sh -c 'cat /var/lib/cloudsprocket-lab/active-drill 2>/dev/null || true')
+    $active = $active.Trim()
+
+    if ($active -and $active -ne $drill) {
+        throw "Cannot start $drill while $active is active. Run .\lab.ps1 reset first."
+    }
+
+    if ($overlay) {
+        if ($script:LabOverlay -and $script:LabOverlay -ne $overlay) {
+            throw "Scenario overlay $script:LabOverlay is active. Run .\lab.ps1 reset first."
+        }
+        $previousOverlay = $script:LabOverlay
+        Set-ScenarioContext $overlay
+        Invoke-LabCompose up --build --detach
+        if ($LASTEXITCODE -ne 0) {
+            Set-ScenarioContext $previousOverlay
+            throw "The scenario services for $drill could not be started."
+        }
+        Save-ScenarioOverlay
+        Wait-LabReady
+    }
+    elseif ($script:LabOverlay) {
+        throw "Scenario overlay $script:LabOverlay is active. Run .\lab.ps1 reset first."
+    }
+
+    & docker exec --user root $ContainerName bash "/opt/lab/drills/break/$drill.sh"
     if ($LASTEXITCODE -ne 0) { throw "The incident could not be applied." }
 }
 
@@ -265,7 +367,7 @@ function Invoke-Verify {
     param([string]$Name)
     Assert-Running
     $drill = Resolve-Drill $Name
-    & docker exec --user root $ContainerName "/opt/lab/drills/checks/$drill.sh"
+    & docker exec --user root $ContainerName bash "/opt/lab/drills/checks/$drill.sh"
     exit $LASTEXITCODE
 }
 
@@ -273,9 +375,9 @@ function Invoke-Check {
     param([string]$Exercise)
     Assert-Running
     if (-not $Exercise) { throw "Provide an exercise number." }
-    & docker exec $ContainerName test -x "/opt/lab/checks/$Exercise.sh"
+    & docker exec $ContainerName test -f "/opt/lab/checks/$Exercise.sh"
     if ($LASTEXITCODE -ne 0) { throw "Exercise '$Exercise' is not available in this early build." }
-    & docker exec --user root $ContainerName "/opt/lab/checks/$Exercise.sh"
+    & docker exec --user root $ContainerName bash "/opt/lab/checks/$Exercise.sh"
     exit $LASTEXITCODE
 }
 
@@ -308,6 +410,7 @@ Commands:
 
 try {
     Set-DistroContext (Get-SelectedDistro)
+    Set-ScenarioContext (Get-SavedScenarioOverlay)
     $argument = if ($CommandArguments.Count -gt 0) { $CommandArguments[0] } else { "" }
     switch ($Command.ToLowerInvariant()) {
         "up" { Start-Lab $argument }
@@ -322,13 +425,10 @@ try {
         "break" { Invoke-Break $argument }
         "verify" { Invoke-Verify $argument }
         "drills" {
-            Write-Host "01  service-failure  Beginner  Diagnose a service trapped in a restart loop."
-            Write-Host "02  full-filesystem  Beginner  Recover an application filesystem with no free space."
-            Write-Host "03  dns-ghost       Intermediate  Find local configuration shadowing the expected DNS answer."
-            Write-Host "04  permission-denied  Beginner  Repair least-privilege access to application data."
-            Write-Host "05  runaway-process  Intermediate  Trace and stop a restart-managed CPU worker."
-            Write-Host "06  invalid-configuration  Intermediate  Validate and roll back malformed service configuration."
-            Write-Host "07  wrong-listener  Intermediate  Repair a service bound to the wrong network interface."
+            foreach ($record in $script:DrillCatalog) {
+                Write-Host ("{0,-2}  {1,-22}  {2,-12}  {3}" -f `
+                    $record.id, $record.slug, $record.difficulty, $record.description)
+            }
         }
         "distros" { Show-Distributions }
         { $_ -in @("shell", "ssh") } {
@@ -338,7 +438,7 @@ try {
         }
         "logs" {
             Use-ContainerDistro
-            & docker compose --project-name $ProjectName --file (Join-Path $RootDirectory "compose.yaml") logs --follow relay
+            Invoke-LabCompose logs --follow relay
             exit $LASTEXITCODE
         }
         "version" { (Get-Content -Raw (Join-Path $RootDirectory "VERSION")).Trim() }

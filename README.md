@@ -5,7 +5,7 @@
 Diagnose and repair realistic Linux incidents on disposable servers you are
 allowed to break.
 
-> **Early build:** version 0.1.0-alpha.6 establishes the lab contract and ships seven
+> **Early build:** version 0.1.0-alpha.7 establishes the lab contract and ships seven
 > complete rescue incidents. The wider curriculum is planned in
 > [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
 
@@ -18,6 +18,8 @@ allowed to break.
   spoiler-fenced solution.
 - Loopback-only access to the sample service at <http://127.0.0.1:8100>.
 - Idempotent drill state that refuses to stack incidents.
+- Stable learner-node images with public incident content mounted read-only from
+  the checked-out repository.
 - A one-click Codespaces environment with a dedicated Docker daemon.
 
 ## Quick start
@@ -120,11 +122,16 @@ The host uses real systemd, which requires `privileged: true` and the host
 cgroup namespace in Docker Compose. Docker documents that a privileged
 container is not a security boundary and can potentially affect its host.
 
-This lab does not mount the Docker socket, your home directory, your SSH keys,
-or the host filesystem. It publishes its only port on `127.0.0.1`, labels its
-resources `cloudsprocket.lab=rescue`, and its wrappers act only on the `lsr`
-Compose project. Inspect [`compose.yaml`](compose.yaml) before running it, and
-do not run an untrusted fork.
+The learner node bind-mounts only this repository's public `runtime`, `drills`
+and `checks` directories, all read-only. It does not mount the repository root,
+Git metadata, `.local` state, environment files, the Docker socket, your home
+directory or your SSH keys. The learner-image build context allow-lists only
+`docker/`, so local internal files are not sent to that build. The lab publishes
+its only port on `127.0.0.1`, labels its resources
+`cloudsprocket.lab=rescue`, and its wrappers act only on the `lsr` Compose
+project. Inspect [`compose.yaml`](compose.yaml) and the
+[incident architecture](docs/INCIDENT-ARCHITECTURE.md) before running it, and do
+not run an untrusted fork.
 
 Codespaces uses a privileged Docker-in-Docker development container and then
 runs the same privileged systemd lab inside its dedicated daemon. It does not
@@ -158,7 +165,8 @@ VM-backed track.
 Rocky Linux provides RHEL-compatible behaviour but does not include a Red Hat
 subscription, Red Hat support or restricted RHEL content.
 
-Once the image has been built, the lab and its exercises work offline.
+Once the learner image has been built, the checked-out lab and its exercises
+work offline.
 
 ## Licence and trademarks
 

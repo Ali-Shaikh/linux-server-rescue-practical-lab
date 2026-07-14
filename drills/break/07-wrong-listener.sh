@@ -36,7 +36,7 @@ if [[ -z "${network_address}" ]]; then
   exit 1
 fi
 
-/opt/lab/drills/fixtures/07-wrong-listener.sh
+bash /opt/lab/drills/fixtures/07-wrong-listener.sh
 systemctl restart rescue-web.service >/dev/null 2>&1 || true
 
 incident_visible=0
