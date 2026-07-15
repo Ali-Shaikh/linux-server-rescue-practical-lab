@@ -37,6 +37,11 @@ jobs:
         run: |
           python3 -m py_compile tests/companion-platforms.py
           python3 tests/release-ci-config.py
+      - name: Validate usability evidence tooling
+        run: |
+          python3 -m py_compile tests/usability-evidence.py tests/usability-evidence-unit.py
+          python3 tests/usability-evidence-unit.py
+          python3 tests/usability-ci-config.py
       - name: Validate Compose model
         run: docker compose --project-name lsr --file compose.yaml config --quiet
 

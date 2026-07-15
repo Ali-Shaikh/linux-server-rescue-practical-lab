@@ -1,0 +1,83 @@
+name: Usability evidence
+
+on:
+  pull_request:
+    paths:
+      - .dockerignore
+      - .devcontainer/**
+      - .github/workflows/usability.yml
+      - compose.yaml
+      - docker/**
+      - lab
+      - runtime/**
+      - drills/**
+      - scenarios/**
+      - tests/smoke.sh
+      - tests/usability-ci-config.py
+      - tests/usability-evidence.py
+      - tests/usability-evidence-unit.py
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - .dockerignore
+      - .devcontainer/**
+      - .github/workflows/usability.yml
+      - compose.yaml
+      - docker/**
+      - lab
+      - runtime/**
+      - drills/**
+      - scenarios/**
+      - tests/smoke.sh
+      - tests/usability-ci-config.py
+      - tests/usability-evidence.py
+      - tests/usability-evidence-unit.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: usability-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    name: Fresh clone timing and peak memory
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Create a fresh learner clone
+        id: clone
+        env:
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          started_at="$(date +%s)"
+          fresh_root="${RUNNER_TEMP}/linux-server-rescue-practical-lab"
+          git clone --quiet "https://github.com/${SOURCE_REPOSITORY}.git" "${fresh_root}"
+          git -C "${fresh_root}" fetch --quiet --depth 1 origin "${SOURCE_SHA}"
+          git -C "${fresh_root}" checkout --quiet --detach "${SOURCE_SHA}"
+          printf 'started_at=%s\n' "${started_at}" >> "${GITHUB_OUTPUT}"
+          printf 'fresh_root=%s\n' "${fresh_root}" >> "${GITHUB_OUTPUT}"
+      - name: Measure the complete automated gate
+        env:
+          EVIDENCE_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          python3 "${{ steps.clone.outputs.fresh_root }}/tests/usability-evidence.py" \
+            --root "${{ steps.clone.outputs.fresh_root }}" \
+            --started-at "${{ steps.clone.outputs.started_at }}" \
+            --output "${RUNNER_TEMP}/usability-evidence.json" \
+            --summary "${GITHUB_STEP_SUMMARY}"
+      - name: Upload machine-readable evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: usability-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/usability-evidence.json
+          if-no-files-found: error
+          retention-days: 30

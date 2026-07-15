@@ -83,6 +83,12 @@ It runs for relevant changes, version tags and manual dispatches without
 publishing images. Runtime smoke remains native amd64 coverage; cross-platform
 runtime smoke is a separate future gate.
 
+The automated usability workflow measures the Ubuntu fresh-clone command path
+against the ten-minute release target and samples peak lab-container memory
+throughout the complete incident suite against the 4 GiB budget. It publishes
+a bounded machine-readable artefact and job summary without replacing the
+manual learner and Codespaces acceptance gates.
+
 ## Deliberate exclusions
 
 The Docker backend shares its host kernel. It cannot faithfully reproduce a
