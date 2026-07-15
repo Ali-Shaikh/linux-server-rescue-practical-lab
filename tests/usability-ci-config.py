@@ -29,6 +29,11 @@ require("actions/upload-artifact@v7" in text, "workflow does not use current upl
 require("git clone --quiet" in text, "timing does not begin with a fresh clone")
 require("--started-at" in text, "fresh clone is outside the measured interval")
 require("tests/usability-evidence.py" in text, "evidence harness is not executed")
+require("runs-on: ubuntu-latest" in text, "evidence does not use a GitHub-hosted image")
+require(
+    "EVIDENCE_RUNNER_ENVIRONMENT: ${{ runner.environment }}" in text,
+    "runner isolation context is not passed to the evidence harness",
+)
 require("GITHUB_STEP_SUMMARY" in text, "job summary is not generated")
 require("runner.temp" in text, "machine-readable evidence is not kept in runner storage")
 require("retention-days: 30" in text, "evidence retention is not bounded")

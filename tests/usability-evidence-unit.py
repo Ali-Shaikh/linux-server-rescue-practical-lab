@@ -66,6 +66,31 @@ class LimitTests(unittest.TestCase):
         self.assertFalse(MODULE.within_memory_limit(4 * 1024**3 + 1))
 
 
+class RunnerIsolationTests(unittest.TestCase):
+    def test_github_hosted_runner_is_accepted(self) -> None:
+        MODULE.require_isolated_github_runner(
+            {
+                "GITHUB_ACTIONS": "true",
+                "EVIDENCE_RUNNER_ENVIRONMENT": "github-hosted",
+                "RUNNER_TEMP": "/tmp/runner",
+            }
+        )
+
+    def test_local_run_is_refused(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "CI-only"):
+            MODULE.require_isolated_github_runner({})
+
+    def test_self_hosted_runner_is_refused(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "GitHub-hosted"):
+            MODULE.require_isolated_github_runner(
+                {
+                    "GITHUB_ACTIONS": "true",
+                    "EVIDENCE_RUNNER_ENVIRONMENT": "self-hosted",
+                    "RUNNER_TEMP": "/tmp/runner",
+                }
+            )
+
+
 class OwnershipTests(unittest.TestCase):
     def test_empty_project_can_be_claimed(self) -> None:
         with patch.object(

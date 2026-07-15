@@ -65,6 +65,8 @@ jobs:
           printf 'started_at=%s\n' "${started_at}" >> "${GITHUB_OUTPUT}"
           printf 'fresh_root=%s\n' "${fresh_root}" >> "${GITHUB_OUTPUT}"
       - name: Measure the complete automated gate
+        env:
+          EVIDENCE_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           python3 "${{ steps.clone.outputs.fresh_root }}/tests/usability-evidence.py" \
             --root "${{ steps.clone.outputs.fresh_root }}" \

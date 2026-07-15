@@ -24,9 +24,14 @@ The workflow is read-only. It receives no repository secrets, publishes no
 images and keeps generated evidence in runner storage rather than the source
 tree. Pull requests from forks do not run the Docker evidence job; a maintainer
 must place the revision on a trusted repository branch or run the gate after
-merge. Before creating anything, the harness also refuses to run when an
-existing container, volume or network uses the `lsr` project prefix. Cleanup is
-enabled only after that ownership check succeeds.
+merge. The harness refuses local and self-hosted execution. It requires the
+isolated `github-hosted` environment used by the workflow's `ubuntu-latest`
+job, for which GitHub documents that each job receives a fresh virtual machine.
+As defence in depth, the harness also refuses to run when an existing container,
+volume or network uses the `lsr` project prefix. Cleanup is enabled only after
+both the isolation and ownership checks succeed. See GitHub's
+[GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+for the isolation boundary.
 
 ## Evidence boundary
 

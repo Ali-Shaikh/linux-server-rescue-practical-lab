@@ -11,6 +11,7 @@ import re
 import subprocess
 import threading
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -50,6 +51,20 @@ def within_time_limit(elapsed_seconds: float) -> bool:
 
 def within_memory_limit(peak_bytes: int) -> bool:
     return peak_bytes <= MEMORY_LIMIT_BYTES
+
+
+def require_isolated_github_runner(environment: Mapping[str, str]) -> None:
+    """Refuse evidence runs outside an isolated GitHub-hosted job."""
+    if environment.get("GITHUB_ACTIONS") != "true":
+        raise RuntimeError(
+            "The usability evidence harness is CI-only and requires GitHub Actions"
+        )
+    if environment.get("EVIDENCE_RUNNER_ENVIRONMENT") != "github-hosted":
+        raise RuntimeError(
+            "The usability evidence harness requires an isolated GitHub-hosted runner"
+        )
+    if not environment.get("RUNNER_TEMP"):
+        raise RuntimeError("The usability evidence harness requires RUNNER_TEMP")
 
 
 def command_text(command: list[str]) -> str:
@@ -389,6 +404,7 @@ def main() -> int:
     owns_lsr_project = False
 
     try:
+        require_isolated_github_runner(os.environ)
         report["runner"] = collect_runner_context(root)
         claim_clean_lsr_project(root)
         owns_lsr_project = True
