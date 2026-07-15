@@ -43,5 +43,13 @@ before the stable `v0.1.0` release.
 ## Reviewed runs
 
 Recorded measurements are added here only after a workflow run has completed on
-the exact reviewed commit. Until then, the workflow artefact and job summary are
-diagnostic evidence rather than a release record.
+the exact reviewed commit.
+
+| Measured at | Commit and run | Fresh-clone path | Peak memory | Samples | Result |
+|---|---|---:|---:|---:|---|
+| 2026-07-14 20:06 UTC | [`8e46d4b`](https://github.com/Ali-Shaikh/linux-server-rescue-practical-lab/commit/8e46d4bf0a41e66c0e55ccb482f55a03340d15ba), [run 29364393631](https://github.com/Ali-Shaikh/linux-server-rescue-practical-lab/actions/runs/29364393631) | 27.12 s / 600 s | 35.41 MiB / 4096 MiB | 61 | PASS |
+
+The reviewed run used an x86_64 GitHub-hosted runner with Docker Engine 28.0.4
+and Docker Compose 2.38.2. The complete Ubuntu incident suite exited 0, the
+sampler reported no errors, and the retained JSON artefact was named
+`usability-evidence-29364393631-1`.
