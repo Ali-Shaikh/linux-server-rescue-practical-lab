@@ -54,6 +54,27 @@ wait_for_upstream() {
   fail "the incident 08 upstream companion did not become healthy"
 }
 
+wait_for_port_conflict() {
+  local listener response rogue_pid
+  for _ in {1..30}; do
+    response="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      curl --fail --silent http://127.0.0.1:8080/health 2>/dev/null || true)"
+    rogue_pid="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      systemctl show --property MainPID --value rescue-debug-listener.service)"
+    listener="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      ss -H -ltnp '( sport = :8080 )')"
+    if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      systemctl is-active --quiet rescue-debug-listener.service \
+      && [[ "${response}" == "rescue-debug-listener" ]] \
+      && [[ "${rogue_pid}" =~ ^[1-9][0-9]*$ ]] \
+      && [[ "${listener}" == *"pid=${rogue_pid},"* ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail "incident 09 did not expose the conflicting debug listener"
+}
+
 cleanup
 trap cleanup EXIT
 
@@ -319,6 +340,37 @@ if docker container inspect lsr-upstream-api >/dev/null 2>&1; then
   fail "lab reset left the incident 08 upstream companion behind"
 fi
 for drill in 01 02 03 04 05 06 07 08; do
+  expect_no_active_drill "${drill}"
+done
+
+expect_no_active_drill 09
+bash ./lab break 09
+wait_for_port_conflict
+expect_broken 09
+MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl is-enabled --quiet rescue-debug-listener.service \
+  || fail "incident 09 did not enable the conflicting listener for the next boot"
+
+# Applying an already-active portable incident must preserve the broken state.
+bash ./lab break 09
+wait_for_port_conflict
+expect_broken 09
+
+bash ./lab down
+bash ./lab up "${distro}"
+wait_for_port_conflict
+expect_broken 09
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "systemctl disable --now rescue-debug-listener.service && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
+bash ./lab verify 09
+
+bash ./lab reset
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl cat rescue-debug-listener.service >/dev/null 2>&1; then
+  fail "lab reset left the incident 09 debug-listener unit behind"
+fi
+for drill in 01 02 03 04 05 06 07 08 09; do
   expect_no_active_drill "${drill}"
 done
 

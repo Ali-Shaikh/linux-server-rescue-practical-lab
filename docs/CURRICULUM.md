@@ -1,6 +1,6 @@
 # Linux Server Rescue curriculum
 
-Status: eight complete incident slices in build, 2026-07-14.
+Status: nine complete incident slices in build, 2026-07-15.
 
 ## Learning promise
 
@@ -71,6 +71,8 @@ That target is complete. The current alpha also includes:
 - `07-wrong-listener`: loopback binding breaks the published network path.
 - `08-upstream-port`: a systemd probe targets the wrong port on a real external
   companion service.
+- `09-port-conflict`: an unauthorised systemd listener prevents the application
+  from binding its expected port.
 
 Release acceptance requires both wrappers, the full incident loop on every
 supported distribution, amd64 and arm64 image builds, restart resilience, and
