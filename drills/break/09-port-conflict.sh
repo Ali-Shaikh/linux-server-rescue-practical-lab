@@ -8,10 +8,11 @@ readonly rogue_service="rescue-debug-listener.service"
 readonly web_service="rescue-web.service"
 readonly unit_file="/etc/systemd/system/${rogue_service}"
 readonly content_dir="/var/lib/rescue-debug"
+readonly readiness_script="/usr/local/bin/rescue-debug-listener-ready"
 
 clean_fault() {
   systemctl disable --now "${rogue_service}" >/dev/null 2>&1 || true
-  rm -f "${unit_file}"
+  rm -f "${readiness_script}" "${unit_file}"
   rm -rf "${content_dir}"
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl reset-failed "${rogue_service}" "${web_service}" >/dev/null 2>&1 || true
