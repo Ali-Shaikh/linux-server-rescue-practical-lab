@@ -148,6 +148,9 @@ wait_for_inode_exhaustion() {
         systemctl is-enabled --quiet rescue-inode-volume.service \
       && [[ "${inode_percent}" == "100%" ]] \
       && [[ "${block_percent}" != "100%" ]] \
+      && MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        find /var/lib/rescue-web/sessions -xdev -type f \
+          -name 'stale-*.session' -print -quit | grep --quiet . \
       && ! MSYS_NO_PATHCONV=1 docker exec lsr-relay \
         curl --fail --silent http://127.0.0.1:8080/health >/dev/null 2>&1; then
       return 0

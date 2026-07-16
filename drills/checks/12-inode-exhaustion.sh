@@ -32,7 +32,7 @@ rm -f "${probe}"
 
 if ! systemctl is-enabled --quiet "${web_service}" \
   || ! systemctl is-active --quiet "${web_service}"; then
-  printf 'NOT FIXED: rescue-web.service is not enabled and active.\n' >&2
+  printf 'NOT FIXED: rescue-web.service is not enabled or not active.\n' >&2
   exit 1
 fi
 
