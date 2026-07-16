@@ -160,24 +160,38 @@ wait_for_inode_exhaustion() {
   fail "incident 12 did not expose inode exhaustion with free blocks"
 }
 
-wait_for_backup_sprawl() {
+backup_storage_is_full() {
   local complete_count partial_file used_percent
+  used_percent="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    df -P /var/lib/rescue-web | awk 'NR == 2 {print $5}')"
+  complete_count="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \
+      -name 'backup-*.tar' | wc -l)"
+  partial_file="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \
+      -name '.backup-*.tar.partial' -print -quit)"
+  MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    systemctl is-active --quiet rescue-backup.timer \
+    && MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      systemctl is-enabled --quiet rescue-backup.timer \
+    && [[ "${used_percent}" == "100%" ]] \
+    && (( complete_count >= 2 )) \
+    && [[ -n "${partial_file}" ]]
+}
+
+wait_for_backup_storage_full() {
   for _ in {1..40}; do
-    used_percent="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
-      df -P /var/lib/rescue-web | awk 'NR == 2 {print $5}')"
-    complete_count="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
-      find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \
-        -name 'backup-*.tar' | wc -l)"
-    partial_file="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
-      find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \
-        -name '.backup-*.tar.partial' -print -quit)"
-    if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
-      systemctl is-active --quiet rescue-backup.timer \
-      && MSYS_NO_PATHCONV=1 docker exec lsr-relay \
-        systemctl is-enabled --quiet rescue-backup.timer \
-      && [[ "${used_percent}" == "100%" ]] \
-      && (( complete_count >= 2 )) \
-      && [[ -n "${partial_file}" ]] \
+    if backup_storage_is_full; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  fail "incident 13 recurring backups did not refill the filesystem"
+}
+
+wait_for_backup_sprawl() {
+  for _ in {1..40}; do
+    if backup_storage_is_full \
       && ! MSYS_NO_PATHCONV=1 docker exec lsr-relay \
         curl --fail --silent http://127.0.0.1:8080/health >/dev/null 2>&1; then
       return 0
@@ -649,7 +663,7 @@ MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
 wait_for_rescue_web 8080 \
   || fail "incident 13 did not allow the expected temporary space-only repair"
 MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl start rescue-backup.timer
-sleep 3
+wait_for_backup_storage_full
 MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
   "systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service >/dev/null 2>&1 || true"
 wait_for_backup_sprawl
