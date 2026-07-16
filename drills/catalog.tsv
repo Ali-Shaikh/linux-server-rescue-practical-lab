@@ -11,3 +11,4 @@ id	slug	difficulty	scope	overlay	services	description
 10	scheduled-regression	Intermediate	portable	none	none	Stop recurring automation from restoring a bad application port.
 11	deleted-open-file	Intermediate	portable	none	none	Release filesystem space retained by an unlinked log and restore the application.
 12	inode-exhaustion	Intermediate	portable	none	none	Recover a filesystem with free blocks but no available inodes.
+13	backup-sprawl	Intermediate	portable	none	none	Stop recurring backups from filling the application filesystem.
