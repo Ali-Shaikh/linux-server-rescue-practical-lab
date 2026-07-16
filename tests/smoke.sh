@@ -94,6 +94,19 @@ wait_for_scheduled_regression() {
   fail "incident 10 did not expose the recurring port regression"
 }
 
+wait_for_rescue_web() {
+  local port="$1" response
+  for _ in {1..20}; do
+    response="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      curl --fail --silent "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
+    if [[ "${response}" == *'"service": "rescue-web"'* ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
 cleanup
 trap cleanup EXIT
 
@@ -443,8 +456,7 @@ expect_broken 10
 # Repairing only the file treats the symptom. The timer must reapply the fault.
 MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
   "install -o root -g root -m 0644 /etc/rescue-web/config.json.last-known-good /etc/rescue-web/config.json && systemctl restart rescue-web.service"
-MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --fail --silent \
-  http://127.0.0.1:8080/health >/dev/null \
+wait_for_rescue_web 8080 \
   || fail "incident 10 did not allow the expected temporary file-only repair"
 wait_for_scheduled_regression
 expect_broken 10

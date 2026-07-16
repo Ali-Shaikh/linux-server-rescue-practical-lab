@@ -44,7 +44,7 @@ cat > "${timer_file}" <<'EOF'
 Description=Reapply the staged rescue-web configuration repeatedly
 
 [Timer]
-OnBootSec=2s
+OnActiveSec=3s
 OnUnitActiveSec=3s
 AccuracySec=100ms
 Unit=rescue-config-regression.service
