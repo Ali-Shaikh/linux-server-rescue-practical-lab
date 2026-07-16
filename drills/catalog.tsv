@@ -7,3 +7,4 @@ id	slug	difficulty	scope	overlay	services	description
 06	invalid-configuration	Intermediate	portable	none	none	Validate and roll back malformed service configuration.
 07	wrong-listener	Intermediate	portable	none	none	Repair a service bound to the wrong network interface.
 08	upstream-port	Intermediate	portable	scenarios/08-upstream-port/compose.yaml	upstream-api	Restore a systemd probe using the wrong upstream port.
+09	port-conflict	Intermediate	portable	none	none	Find an unauthorised service occupying the application port.
