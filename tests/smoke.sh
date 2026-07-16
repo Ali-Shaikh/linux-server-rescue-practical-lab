@@ -662,6 +662,11 @@ MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
   "systemctl stop rescue-backup.timer && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name '.backup-*.tar.partial' -delete && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
 wait_for_rescue_web 8080 \
   || fail "incident 13 did not allow the expected temporary space-only repair"
+# Remove the existing startup marker while the recovered process is still
+# healthy. Recurring backups then consume that released space, so the next
+# restart must create a new file rather than rewrite an allocated one.
+MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  rm -f /var/lib/rescue-web/last-startup
 MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl start rescue-backup.timer
 wait_for_backup_storage_full
 MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
