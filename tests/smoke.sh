@@ -96,13 +96,13 @@ wait_for_scheduled_regression() {
 
 wait_for_rescue_web() {
   local port="$1" response
-  for _ in {1..20}; do
+  for _ in {1..30}; do
     response="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
       curl --fail --silent "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
     if [[ "${response}" == *'"service": "rescue-web"'* ]]; then
       return 0
     fi
-    sleep 0.1
+    sleep 0.5
   done
   return 1
 }
@@ -453,11 +453,14 @@ bash ./lab break 10
 wait_for_scheduled_regression
 expect_broken 10
 
-# Repairing only the file treats the symptom. The timer must reapply the fault.
+# Pause only the timer clock so a slow runner cannot hide the temporary repair.
+# It remains enabled and is restarted immediately afterwards to reapply the fault.
 MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
-  "install -o root -g root -m 0644 /etc/rescue-web/config.json.last-known-good /etc/rescue-web/config.json && systemctl restart rescue-web.service"
+  "systemctl stop rescue-config-regression.timer && install -o root -g root -m 0644 /etc/rescue-web/config.json.last-known-good /etc/rescue-web/config.json && systemctl restart rescue-web.service"
 wait_for_rescue_web 8080 \
   || fail "incident 10 did not allow the expected temporary file-only repair"
+MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl start rescue-config-regression.timer
 wait_for_scheduled_regression
 expect_broken 10
 
