@@ -92,6 +92,8 @@ Group=rescue
 RuntimeDirectory=rescue-deleted-log
 RuntimeDirectoryMode=0750
 ExecStart=/usr/local/bin/rescue-deleted-log-holder
+ExecStartPost=/bin/bash -c 'for _ in {1..100}; do [[ -f /run/rescue-deleted-log/ready ]] && exit 0; sleep 0.05; done; exit 1'
+TimeoutStartSec=15s
 TimeoutStopSec=5s
 
 [Install]
