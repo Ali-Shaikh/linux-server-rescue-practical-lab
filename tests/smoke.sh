@@ -107,6 +107,34 @@ wait_for_rescue_web() {
   return 1
 }
 
+wait_for_deleted_open_file() {
+  local deleted_fd holder_pid used_percent
+  for _ in {1..40}; do
+    holder_pid="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      systemctl show --property MainPID --value rescue-deleted-log-holder.service)"
+    deleted_fd=""
+    if [[ "${holder_pid}" =~ ^[1-9][0-9]*$ ]]; then
+      deleted_fd="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        find "/proc/${holder_pid}/fd" -maxdepth 1 \
+          -lname '/var/lib/rescue-web/archived-access.log (deleted)' \
+          -print -quit 2>/dev/null || true)"
+    fi
+    used_percent="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      df -P /var/lib/rescue-web | awk 'NR == 2 {print $5}')"
+    if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      systemctl is-active --quiet rescue-deleted-log-holder.service \
+      && MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        systemctl is-enabled --quiet rescue-deleted-log-holder.service \
+      && [[ -n "${deleted_fd}" && "${used_percent}" == "100%" ]] \
+      && ! MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        curl --fail --silent http://127.0.0.1:8080/health >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  fail "incident 11 did not expose the deleted open log"
+}
+
 cleanup
 trap cleanup EXIT
 
@@ -488,6 +516,44 @@ if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
   fail "lab reset left the incident 10 regression service behind"
 fi
 for drill in 01 02 03 04 05 06 07 08 09 10; do
+  expect_no_active_drill "${drill}"
+done
+
+expect_no_active_drill 11
+bash ./lab break 11
+wait_for_deleted_open_file
+expect_broken 11
+
+# Removing visible files cannot release blocks retained by an open descriptor.
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "rm -f /var/lib/rescue-web/* && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service >/dev/null 2>&1 || true"
+wait_for_deleted_open_file
+expect_broken 11
+
+# Applying an already-active portable incident must preserve the hidden usage.
+bash ./lab break 11
+wait_for_deleted_open_file
+expect_broken 11
+
+bash ./lab down
+bash ./lab up "${distro}"
+wait_for_deleted_open_file
+expect_broken 11
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "systemctl disable --now rescue-deleted-log-holder.service && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
+bash ./lab verify 11
+
+bash ./lab reset
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl cat rescue-deleted-log-holder.service >/dev/null 2>&1; then
+  fail "lab reset left the incident 11 deleted-log holder unit behind"
+fi
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl cat rescue-deleted-log-volume.service >/dev/null 2>&1; then
+  fail "lab reset left the incident 11 data-volume unit behind"
+fi
+for drill in 01 02 03 04 05 06 07 08 09 10 11; do
   expect_no_active_drill "${drill}"
 done
 
