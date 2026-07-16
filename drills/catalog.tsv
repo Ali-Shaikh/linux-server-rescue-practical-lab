@@ -8,3 +8,4 @@ id	slug	difficulty	scope	overlay	services	description
 07	wrong-listener	Intermediate	portable	none	none	Repair a service bound to the wrong network interface.
 08	upstream-port	Intermediate	portable	scenarios/08-upstream-port/compose.yaml	upstream-api	Restore a systemd probe using the wrong upstream port.
 09	port-conflict	Intermediate	portable	none	none	Find an unauthorised service occupying the application port.
+10	scheduled-regression	Intermediate	portable	none	none	Stop recurring automation from restoring a bad application port.

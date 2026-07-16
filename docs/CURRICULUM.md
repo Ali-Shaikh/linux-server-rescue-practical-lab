@@ -1,6 +1,6 @@
 # Linux Server Rescue curriculum
 
-Status: nine complete incident slices in build, 2026-07-15.
+Status: ten complete incident slices in build, 2026-07-16.
 
 ## Learning promise
 
@@ -73,6 +73,8 @@ That target is complete. The current alpha also includes:
   companion service.
 - `09-port-conflict`: an unauthorised systemd listener prevents the application
   from binding its expected port.
+- `10-scheduled-regression`: a systemd timer repeatedly restores a valid but
+  wrong application port after superficial repairs.
 
 Release acceptance requires both wrappers, the full incident loop on every
 supported distribution, amd64 and arm64 image builds, restart resilience, and
