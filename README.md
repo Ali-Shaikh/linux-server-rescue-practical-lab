@@ -5,7 +5,7 @@
 Diagnose and repair realistic Linux incidents on disposable servers you are
 allowed to break.
 
-> **Early build:** version 0.1.0-alpha.8 establishes the lab contract and ships nine
+> **Early build:** version 0.1.0-alpha.8 establishes the lab contract and ships ten
 > complete rescue incidents. The wider curriculum is planned in
 > [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
 
@@ -13,7 +13,7 @@ allowed to break.
 
 - A selectable real systemd host called `relay`: Ubuntu, Debian or Rocky Linux.
 - The same lifecycle commands in Bash and PowerShell.
-- Nine complete drills spanning services, storage, permissions, DNS, process
+- Ten complete drills spanning services, storage, permissions, DNS, process
   load, networking and change recovery, each with ordered hints,
   self-verification and a spoiler-fenced solution.
 - Loopback-only access to the sample service at <http://127.0.0.1:8100>.
@@ -100,6 +100,7 @@ run `./lab verify 01` or `.\lab.ps1 verify 01`.
 | `07` | [Wrong listener](drills/07-wrong-listener.md) | Repair a service bound only to container loopback. |
 | `08` | [Upstream port](drills/08-upstream-port.md) | Restore a systemd probe using the wrong external upstream port. |
 | `09` | [Port conflict](drills/09-port-conflict.md) | Find and remove an unauthorised service occupying the application port. |
+| `10` | [Scheduled regression](drills/10-scheduled-regression.md) | Stop recurring automation from restoring a bad application port. |
 
 ## Command contract
 
@@ -166,6 +167,10 @@ Incident 09 starts a Python standard-library debug listener as the unprivileged
 `rescue` user inside the disposable learner node. It uses only the existing
 container port, adds no host exposure and is removed with the learner container
 by `lab reset`.
+
+Incident 10 runs a bounded systemd timer inside the disposable learner node.
+It changes only the lab application's runtime state, contacts no external
+service and is removed with the learner container by `lab reset`.
 
 ## Capability boundary
 

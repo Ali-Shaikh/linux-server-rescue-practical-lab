@@ -75,6 +75,25 @@ wait_for_port_conflict() {
   fail "incident 09 did not expose the conflicting debug listener"
 }
 
+wait_for_scheduled_regression() {
+  local response
+  for _ in {1..30}; do
+    response="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      curl --fail --silent http://127.0.0.1:8081/health 2>/dev/null || true)"
+    if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      systemctl is-active --quiet rescue-config-regression.timer \
+      && MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        systemctl is-enabled --quiet rescue-config-regression.timer \
+      && [[ "${response}" == *'"service": "rescue-web"'* ]] \
+      && ! MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        curl --fail --silent http://127.0.0.1:8080/health >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail "incident 10 did not expose the recurring port regression"
+}
+
 cleanup
 trap cleanup EXIT
 
@@ -371,6 +390,89 @@ if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
   fail "lab reset left the incident 09 debug-listener unit behind"
 fi
 for drill in 01 02 03 04 05 06 07 08 09; do
+  expect_no_active_drill "${drill}"
+done
+
+# Occupying the bad port forces a failed break after the timer job starts. The
+# rollback must remove every scheduled-regression artefact and restore the web
+# service without recording an active incident.
+MSYS_NO_PATHCONV=1 docker exec lsr-relay systemd-run --quiet --collect \
+  --unit=rescue-break-blocker.service \
+  /usr/bin/python3 -m http.server 8081 --bind 127.0.0.1
+blocker_ready=0
+for _ in {1..20}; do
+  if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    curl --fail --silent http://127.0.0.1:8081/ >/dev/null 2>&1; then
+    blocker_ready=1
+    break
+  fi
+  sleep 0.25
+done
+(( blocker_ready == 1 )) \
+  || fail "the incident 10 failed-break blocker did not start"
+
+set +e
+bash ./lab break 10
+failed_break_code=$?
+set -e
+[[ ${failed_break_code} -ne 0 ]] \
+  || fail "incident 10 unexpectedly succeeded while port 8081 was occupied"
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "journalctl -u rescue-config-regression.service --no-pager | grep --quiet 'Scheduled deployment restored'" \
+  || fail "incident 10 failed before its recurring job started"
+expect_no_active_drill 10
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl cat rescue-config-regression.timer >/dev/null 2>&1; then
+  fail "a failed incident 10 break left the regression timer behind"
+fi
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  test -e /usr/local/bin/rescue-config-regression; then
+  fail "a failed incident 10 break left its deployment script behind"
+fi
+MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --fail --silent \
+  http://127.0.0.1:8080/health | grep --quiet '"service": "rescue-web"' \
+  || fail "a failed incident 10 break did not restore rescue-web"
+MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl stop rescue-break-blocker.service
+
+expect_no_active_drill 10
+bash ./lab break 10
+wait_for_scheduled_regression
+expect_broken 10
+
+# Repairing only the file treats the symptom. The timer must reapply the fault.
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "install -o root -g root -m 0644 /etc/rescue-web/config.json.last-known-good /etc/rescue-web/config.json && systemctl restart rescue-web.service"
+MSYS_NO_PATHCONV=1 docker exec lsr-relay curl --fail --silent \
+  http://127.0.0.1:8080/health >/dev/null \
+  || fail "incident 10 did not allow the expected temporary file-only repair"
+wait_for_scheduled_regression
+expect_broken 10
+
+# Applying an already-active portable incident must preserve the recurring fault.
+bash ./lab break 10
+wait_for_scheduled_regression
+expect_broken 10
+
+bash ./lab down
+bash ./lab up "${distro}"
+wait_for_scheduled_regression
+expect_broken 10
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "systemctl disable --now rescue-config-regression.timer && systemctl stop rescue-config-regression.service && install -o root -g root -m 0644 /etc/rescue-web/config.json.last-known-good /etc/rescue-web/config.json && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
+bash ./lab verify 10
+
+bash ./lab reset
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl cat rescue-config-regression.timer >/dev/null 2>&1; then
+  fail "lab reset left the incident 10 regression timer behind"
+fi
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl cat rescue-config-regression.service >/dev/null 2>&1; then
+  fail "lab reset left the incident 10 regression service behind"
+fi
+for drill in 01 02 03 04 05 06 07 08 09 10; do
   expect_no_active_drill "${drill}"
 done
 
