@@ -1,6 +1,6 @@
 # Linux Server Rescue curriculum
 
-Status: ten complete incident slices in build, 2026-07-16.
+Status: eleven complete incident slices in build, 2026-07-16.
 
 ## Learning promise
 
@@ -34,7 +34,7 @@ so an incident may implement a later curriculum stage first.
 | Stage | Capability | Candidate incidents | Backend | Status |
 |---|---|---|---|---|
 | 1 | Services and logs | Bad systemd override, restart loop, stale dependency | Docker | First incident implemented |
-| 2 | Capacity | Full filesystem, deleted-open file, exhausted inodes | Docker | Full-filesystem incident implemented |
+| 2 | Capacity | Full filesystem, deleted-open file, exhausted inodes | Docker | Full-filesystem and deleted-open-file incidents implemented |
 | 3 | Identity and access | Wrong ownership, broken sudo rule, locked service account | Docker | Permission incident implemented |
 | 4 | Networking and DNS | Wrong listener, bad resolver, shadowed hosts entry, failed upstream | Docker | DNS, listener and external-upstream incidents implemented |
 | 5 | Processes and performance | Runaway process, memory pressure, file descriptor exhaustion | Docker | Runaway process incident implemented |
@@ -75,6 +75,8 @@ That target is complete. The current alpha also includes:
   from binding its expected port.
 - `10-scheduled-regression`: a systemd timer repeatedly restores a valid but
   wrong application port after superficial repairs.
+- `11-deleted-open-file`: an unlinked log remains open and consumes a bounded
+  application filesystem even though directory scans cannot find its bytes.
 
 Release acceptance requires both wrappers, the full incident loop on every
 supported distribution, amd64 and arm64 image builds, restart resilience, and

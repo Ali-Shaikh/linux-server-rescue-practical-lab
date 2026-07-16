@@ -5,15 +5,15 @@
 Diagnose and repair realistic Linux incidents on disposable servers you are
 allowed to break.
 
-> **Early build:** version 0.1.0-alpha.8 establishes the lab contract and ships ten
-> complete rescue incidents. The wider curriculum is planned in
+> **Early build:** version 0.1.0-alpha.8 establishes the lab contract and ships
+> eleven complete rescue incidents. The wider curriculum is planned in
 > [`docs/CURRICULUM.md`](docs/CURRICULUM.md).
 
 ## What works today
 
 - A selectable real systemd host called `relay`: Ubuntu, Debian or Rocky Linux.
 - The same lifecycle commands in Bash and PowerShell.
-- Ten complete drills spanning services, storage, permissions, DNS, process
+- Eleven complete drills spanning services, storage, permissions, DNS, process
   load, networking and change recovery, each with ordered hints,
   self-verification and a spoiler-fenced solution.
 - Loopback-only access to the sample service at <http://127.0.0.1:8100>.
@@ -101,6 +101,7 @@ run `./lab verify 01` or `.\lab.ps1 verify 01`.
 | `08` | [Upstream port](drills/08-upstream-port.md) | Restore a systemd probe using the wrong external upstream port. |
 | `09` | [Port conflict](drills/09-port-conflict.md) | Find and remove an unauthorised service occupying the application port. |
 | `10` | [Scheduled regression](drills/10-scheduled-regression.md) | Stop recurring automation from restoring a bad application port. |
+| `11` | [Deleted open file](drills/11-deleted-open-file.md) | Release filesystem space retained by an unlinked log. |
 
 ## Command contract
 
@@ -171,6 +172,10 @@ by `lab reset`.
 Incident 10 runs a bounded systemd timer inside the disposable learner node.
 It changes only the lab application's runtime state, contacts no external
 service and is removed with the learner container by `lab reset`.
+
+Incident 11 uses a 16 MiB tmpfs and an unprivileged systemd service inside the
+disposable learner node. It writes no host path, exposes no port and is removed
+with the learner container by `lab reset`.
 
 ## Capability boundary
 
