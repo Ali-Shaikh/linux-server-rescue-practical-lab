@@ -28,6 +28,10 @@ For this incident, `backup-0003.tar` is the newest complete archive. Remove the
 incomplete fourth attempt and the two confirmed older copies, while preserving
 that recent backup:
 
+These are the expected names from the bundled fixture. Confirm them in your
+sorted listing and substitute the paths you actually observed before deleting
+anything.
+
 ```bash
 sudo rm -- \
   /var/lib/rescue-web/backups/.backup-0004.tar.partial \

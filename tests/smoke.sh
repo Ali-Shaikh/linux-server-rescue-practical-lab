@@ -684,9 +684,42 @@ bash ./lab up "${distro}"
 wait_for_backup_sprawl
 expect_broken 13
 
+# Exercise the supported timer-plus-retention repair. The wrapper keeps the two
+# newest complete archives, while the verifier observes completed jobs until
+# storage reaches a steady state.
+MSYS_NO_PATHCONV=1 docker exec -i lsr-relay \
+  tee /usr/local/bin/rescue-backup-retained >/dev/null <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+/usr/local/bin/rescue-backup-run
+find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \
+  -name 'backup-*.tar' -printf '%T@ %p\n' \
+  | sort --numeric-sort --reverse \
+  | awk 'NR > 2 {print $2}' \
+  | xargs --no-run-if-empty rm -f --
+EOF
+MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  install -d -o root -g root -m 0755 \
+    /etc/systemd/system/rescue-backup.service.d
+MSYS_NO_PATHCONV=1 docker exec -i lsr-relay \
+  tee /etc/systemd/system/rescue-backup.service.d/retention.conf \
+    >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/rescue-backup-retained
+EOF
 MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
-  "systemctl disable --now rescue-backup.timer && systemctl stop rescue-backup.service && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \( -name '.backup-*.tar.partial' -o -name 'backup-000[12].tar' \) -delete && systemctl reset-failed rescue-backup.service rescue-web.service && systemctl restart rescue-web.service"
+  "systemctl stop rescue-backup.timer && systemctl stop rescue-backup.service && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name '.backup-*.tar.partial' -delete && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name 'backup-*.tar' -printf '%T@ %p\\n' | sort --numeric-sort --reverse | awk 'NR > 1 {print \$2}' | xargs --no-run-if-empty rm -f -- && chmod 0755 /usr/local/bin/rescue-backup-retained && systemctl daemon-reload && systemctl reset-failed rescue-backup.service rescue-web.service && systemctl restart rescue-web.service && systemctl start rescue-backup.timer"
 bash ./lab verify 13
+
+# Also exercise the documented disable-and-clean repair while preserving the
+# newest complete backup selected from the live filesystem.
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "systemctl disable --now rescue-backup.timer && systemctl stop rescue-backup.service && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name '.backup-*.tar.partial' -delete && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name 'backup-*.tar' -printf '%T@ %p\\n' | sort --numeric-sort --reverse | awk 'NR > 1 {print \$2}' | xargs --no-run-if-empty rm -f -- && systemctl reset-failed rescue-backup.service rescue-web.service && systemctl restart rescue-web.service"
+bash ./lab verify 13
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "rm -f /usr/local/bin/rescue-backup-retained /etc/systemd/system/rescue-backup.service.d/retention.conf && rmdir /etc/systemd/system/rescue-backup.service.d && systemctl daemon-reload"
 
 bash ./lab reset
 for unit in rescue-backup.timer rescue-backup.service rescue-backup-volume.service; do
@@ -695,10 +728,12 @@ for unit in rescue-backup.timer rescue-backup.service rescue-backup-volume.servi
     fail "lab reset left the incident 13 ${unit} unit behind"
   fi
 done
-if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
-  test -e /usr/local/bin/rescue-backup-run; then
-  fail "lab reset left the incident 13 backup script behind"
-fi
+for script in rescue-backup-run rescue-backup-volume; do
+  if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    test -e "/usr/local/bin/${script}"; then
+    fail "lab reset left the incident 13 ${script} script behind"
+  fi
+done
 for drill in 01 02 03 04 05 06 07 08 09 10 11 12 13; do
   expect_no_active_drill "${drill}"
 done
