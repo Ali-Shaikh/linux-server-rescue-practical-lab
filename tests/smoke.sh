@@ -135,6 +135,28 @@ wait_for_deleted_open_file() {
   fail "incident 11 did not expose the deleted open log"
 }
 
+wait_for_inode_exhaustion() {
+  local block_percent inode_percent
+  for _ in {1..40}; do
+    inode_percent="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      df -Pi /var/lib/rescue-web | awk 'NR == 2 {print $5}')"
+    block_percent="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      df -P /var/lib/rescue-web | awk 'NR == 2 {print $5}')"
+    if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      systemctl is-active --quiet rescue-inode-volume.service \
+      && MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        systemctl is-enabled --quiet rescue-inode-volume.service \
+      && [[ "${inode_percent}" == "100%" ]] \
+      && [[ "${block_percent}" != "100%" ]] \
+      && ! MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        curl --fail --silent http://127.0.0.1:8080/health >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  fail "incident 12 did not expose inode exhaustion with free blocks"
+}
+
 cleanup
 trap cleanup EXIT
 
@@ -554,6 +576,34 @@ if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
   fail "lab reset left the incident 11 data-volume unit behind"
 fi
 for drill in 01 02 03 04 05 06 07 08 09 10 11; do
+  expect_no_active_drill "${drill}"
+done
+
+expect_no_active_drill 12
+bash ./lab break 12
+wait_for_inode_exhaustion
+expect_broken 12
+
+# Applying an already-active portable incident must preserve inode exhaustion.
+bash ./lab break 12
+wait_for_inode_exhaustion
+expect_broken 12
+
+bash ./lab down
+bash ./lab up "${distro}"
+wait_for_inode_exhaustion
+expect_broken 12
+
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "find /var/lib/rescue-web/sessions -xdev -type f -name 'stale-*.session' -delete && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
+bash ./lab verify 12
+
+bash ./lab reset
+if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  systemctl cat rescue-inode-volume.service >/dev/null 2>&1; then
+  fail "lab reset left the incident 12 inode-volume unit behind"
+fi
+for drill in 01 02 03 04 05 06 07 08 09 10 11 12; do
   expect_no_active_drill "${drill}"
 done
 
