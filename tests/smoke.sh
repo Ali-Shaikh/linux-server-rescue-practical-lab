@@ -160,6 +160,47 @@ wait_for_inode_exhaustion() {
   fail "incident 12 did not expose inode exhaustion with free blocks"
 }
 
+backup_storage_is_full() {
+  local complete_count partial_file used_percent
+  used_percent="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    df -P /var/lib/rescue-web | awk 'NR == 2 {print $5}')"
+  complete_count="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \
+      -name 'backup-*.tar' | wc -l)"
+  partial_file="$(MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \
+      -name '.backup-*.tar.partial' -print -quit)"
+  MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    systemctl is-active --quiet rescue-backup.timer \
+    && MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+      systemctl is-enabled --quiet rescue-backup.timer \
+    && [[ "${used_percent}" == "100%" ]] \
+    && (( complete_count >= 2 )) \
+    && [[ -n "${partial_file}" ]]
+}
+
+wait_for_backup_storage_full() {
+  for _ in {1..40}; do
+    if backup_storage_is_full; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  fail "incident 13 recurring backups did not refill the filesystem"
+}
+
+wait_for_backup_sprawl() {
+  for _ in {1..40}; do
+    if backup_storage_is_full \
+      && ! MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+        curl --fail --silent http://127.0.0.1:8080/health >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  fail "incident 13 did not expose recurring backup filesystem growth"
+}
+
 cleanup
 trap cleanup EXIT
 
@@ -607,6 +648,93 @@ if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
   fail "lab reset left the incident 12 inode-volume unit behind"
 fi
 for drill in 01 02 03 04 05 06 07 08 09 10 11 12; do
+  expect_no_active_drill "${drill}"
+done
+
+expect_no_active_drill 13
+bash ./lab break 13
+wait_for_backup_sprawl
+expect_broken 13
+
+# Pause only the timer clock to make the temporary cleanup deterministic. The
+# timer remains enabled and is restarted immediately after rescue-web recovers.
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "systemctl stop rescue-backup.timer && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name '.backup-*.tar.partial' -delete && systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service"
+wait_for_rescue_web 8080 \
+  || fail "incident 13 did not allow the expected temporary space-only repair"
+# Remove the existing startup marker while the recovered process is still
+# healthy. Recurring backups then consume that released space, so the next
+# restart must create a new file rather than rewrite an allocated one.
+MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  rm -f /var/lib/rescue-web/last-startup
+MSYS_NO_PATHCONV=1 docker exec lsr-relay systemctl start rescue-backup.timer
+wait_for_backup_storage_full
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "systemctl reset-failed rescue-web.service && systemctl restart rescue-web.service >/dev/null 2>&1 || true"
+wait_for_backup_sprawl
+expect_broken 13
+
+# Applying an already-active portable incident must preserve backup growth.
+bash ./lab break 13
+wait_for_backup_sprawl
+expect_broken 13
+
+bash ./lab down
+bash ./lab up "${distro}"
+wait_for_backup_sprawl
+expect_broken 13
+
+# Exercise the supported timer-plus-retention repair. The wrapper keeps the two
+# newest complete archives, while the verifier observes completed jobs until
+# storage reaches a steady state.
+MSYS_NO_PATHCONV=1 docker exec -i lsr-relay \
+  tee /usr/local/bin/rescue-backup-retained >/dev/null <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+/usr/local/bin/rescue-backup-run
+find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f \
+  -name 'backup-*.tar' -printf '%T@ %p\n' \
+  | sort --numeric-sort --reverse \
+  | awk 'NR > 2 {print $2}' \
+  | xargs --no-run-if-empty rm -f --
+EOF
+MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+  install -d -o root -g root -m 0755 \
+    /etc/systemd/system/rescue-backup.service.d
+MSYS_NO_PATHCONV=1 docker exec -i lsr-relay \
+  tee /etc/systemd/system/rescue-backup.service.d/retention.conf \
+    >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/rescue-backup-retained
+EOF
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "systemctl stop rescue-backup.timer && systemctl stop rescue-backup.service && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name '.backup-*.tar.partial' -delete && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name 'backup-*.tar' -printf '%T@ %p\\n' | sort --numeric-sort --reverse | awk 'NR > 1 {print \$2}' | xargs --no-run-if-empty rm -f -- && chmod 0755 /usr/local/bin/rescue-backup-retained && systemctl daemon-reload && systemctl reset-failed rescue-backup.service rescue-web.service && systemctl restart rescue-web.service && systemctl start rescue-backup.timer"
+bash ./lab verify 13
+
+# Also exercise the documented disable-and-clean repair while preserving the
+# newest complete backup selected from the live filesystem.
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "systemctl disable --now rescue-backup.timer && systemctl stop rescue-backup.service && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name '.backup-*.tar.partial' -delete && find /var/lib/rescue-web/backups -xdev -maxdepth 1 -type f -name 'backup-*.tar' -printf '%T@ %p\\n' | sort --numeric-sort --reverse | awk 'NR > 1 {print \$2}' | xargs --no-run-if-empty rm -f -- && systemctl reset-failed rescue-backup.service rescue-web.service && systemctl restart rescue-web.service"
+bash ./lab verify 13
+MSYS_NO_PATHCONV=1 docker exec lsr-relay bash -c \
+  "rm -f /usr/local/bin/rescue-backup-retained /etc/systemd/system/rescue-backup.service.d/retention.conf && rmdir /etc/systemd/system/rescue-backup.service.d && systemctl daemon-reload"
+
+bash ./lab reset
+for unit in rescue-backup.timer rescue-backup.service rescue-backup-volume.service; do
+  if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    systemctl cat "${unit}" >/dev/null 2>&1; then
+    fail "lab reset left the incident 13 ${unit} unit behind"
+  fi
+done
+for script in rescue-backup-run rescue-backup-volume; do
+  if MSYS_NO_PATHCONV=1 docker exec lsr-relay \
+    test -e "/usr/local/bin/${script}"; then
+    fail "lab reset left the incident 13 ${script} script behind"
+  fi
+done
+for drill in 01 02 03 04 05 06 07 08 09 10 11 12 13; do
   expect_no_active_drill "${drill}"
 done
 
