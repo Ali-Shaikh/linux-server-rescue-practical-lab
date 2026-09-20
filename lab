@@ -398,10 +398,32 @@ up() {
   status
 }
 
+# Stop and remove Compose resources. Privileged systemd plus a stalled bind
+# mount can ignore SIGTERM/SIGKILL; fall back to docker rm -f, then tell the
+# user to restart Docker Desktop if the engine still will not reap the task.
+remove_lab_stack() {
+  local -a extra=()
+  if [[ "${1:-}" == "--volumes" ]]; then
+    extra+=(--volumes)
+  fi
+
+  compose down --remove-orphans --timeout 8 "${extra[@]}" >/dev/null 2>&1 || true
+
+  if container_exists; then
+    printf 'The relay container did not stop cleanly. Forcing removal...\n'
+    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    compose down --remove-orphans --timeout 5 "${extra[@]}" >/dev/null 2>&1 || true
+  fi
+
+  if container_exists; then
+    fail "The relay container is still running. Restart Docker Desktop, then run lab down again."
+  fi
+}
+
 down() {
   command -v docker >/dev/null 2>&1 || fail "Docker was not found."
   adopt_container_distro
-  compose down --remove-orphans
+  remove_lab_stack
   printf 'Linux Server Rescue is down. %s drill state is preserved; lab reset clears it.\n' \
     "$(distro_display "${lab_distro}")"
 }
@@ -411,7 +433,7 @@ reset() {
   adopt_container_distro
   printf 'Removing only %s resources in the %s Compose project, including its state volume...\n' \
     "$(distro_display "${lab_distro}")" "${project_name}"
-  compose down --volumes --remove-orphans
+  remove_lab_stack --volumes
   clear_active_overlay
   up "${lab_distro}"
 }
