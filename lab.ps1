@@ -476,7 +476,7 @@ function Invoke-Break {
         throw "Scenario overlay $script:LabOverlay is active. Run .\lab.ps1 reset first."
     }
 
-    & docker exec --user root $ContainerName bash "/opt/lab/drills/break/$drill.sh"
+    Invoke-ContainerScript "drills\break\$drill.sh"
     if ($LASTEXITCODE -ne 0) {
         $currentActive = Get-ActiveDrill
         if ($overlay -and -not $active -and -not $currentActive) {
@@ -486,11 +486,25 @@ function Invoke-Break {
     }
 }
 
+function Invoke-ContainerScript {
+    param([string]$RelativePath)
+
+    $full = Join-Path $RootDirectory $RelativePath
+    if (-not (Test-Path -LiteralPath $full)) {
+        throw "Missing script $full"
+    }
+    # Pipe from the Windows path. Execing /opt/lab/... hits a bind mount that
+    # Docker Desktop on this machine can stall on indefinitely.
+    cmd.exe /c "docker exec -i --user root `"$ContainerName`" bash < `"$full`""
+}
+
 function Invoke-Verify {
     param([string]$Name)
     Assert-Running
     $drill = Resolve-Drill $Name
-    & docker exec --user root $ContainerName bash "/opt/lab/drills/checks/$drill.sh"
+    Write-Host "Checking incident $drill on relay."
+    Write-Host "Run this from the lab directory in PowerShell, not inside lab shell."
+    Invoke-ContainerScript "drills\checks\$drill.sh"
     exit $LASTEXITCODE
 }
 
@@ -522,7 +536,7 @@ Commands:
   doctor [distro]    Check local requirements and conflicts
   check <exercise>   Run an exercise check
   break <drill>      Apply an incident
-  verify <drill>     Verify a repair without changing state
+  verify <drill>     Verify a repair from this directory, not inside lab shell
   drills             List incidents
   distros            List supported Linux distributions
   shell              Open a shell on relay as the rescue user

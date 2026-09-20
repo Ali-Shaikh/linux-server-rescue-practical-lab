@@ -30,6 +30,14 @@ docker_exec() {
   MSYS_NO_PATHCONV=1 docker exec "$@"
 }
 
+# Run a host-side script in the container via stdin. Do not exec a path under
+# /opt/lab: that tree is a bind mount and Docker Desktop can stall on it.
+docker_exec_script() {
+  local script="$1"
+  [[ -f "${script}" ]] || fail "Missing script ${script}"
+  docker_exec -i --user root "${container_name}" bash < "${script}"
+}
+
 fail() {
   printf 'ERROR: %s\n' "$*" >&2
   exit 1
@@ -473,8 +481,7 @@ run_break() {
     fail "Scenario overlay ${lab_overlay} is active. Run lab reset first."
   fi
 
-  if ! docker_exec --user root "${container_name}" \
-    bash "/opt/lab/drills/break/${drill}.sh"; then
+  if ! docker_exec_script "${root_dir}/drills/break/${drill}.sh"; then
     current_active="$(current_active_drill)"
     if [[ -n "${overlay}" && -z "${active}" && -z "${current_active}" ]]; then
       rollback_scenario_activation "${drill}" "${previous_overlay}" || true
@@ -487,8 +494,9 @@ run_verify() {
   local drill
   require_running
   drill="$(normalise_drill "${1:-}")"
-  docker_exec --user root "${container_name}" \
-    bash "/opt/lab/drills/checks/${drill}.sh"
+  printf 'Checking incident %s on relay.\n' "${drill}"
+  printf 'Run this from the lab directory on your laptop, not inside lab shell.\n'
+  docker_exec_script "${root_dir}/drills/checks/${drill}.sh"
 }
 
 run_check() {
@@ -538,7 +546,7 @@ Commands:
   doctor [distro]    Check local requirements and conflicts
   check <exercise>   Run an exercise check
   break <drill>      Apply an incident
-  verify <drill>     Verify a repair without changing state
+  verify <drill>     Verify a repair from this directory, not inside lab shell
   drills             List incidents
   distros            List supported Linux distributions
   shell              Open a shell on relay as the rescue user
