@@ -411,11 +411,30 @@ function Start-Lab {
     Show-Status
 }
 
+function Remove-LabStack {
+    param([switch]$Volumes)
+
+    $downArgs = @("down", "--remove-orphans", "--timeout", "8")
+    if ($Volumes) { $downArgs += "--volumes" }
+    Invoke-LabCompose @downArgs *> $null
+
+    if (Test-ContainerExists) {
+        Write-Host "The relay container did not stop cleanly. Forcing removal..."
+        & docker rm -f $ContainerName *> $null
+        $retryArgs = @("down", "--remove-orphans", "--timeout", "5")
+        if ($Volumes) { $retryArgs += "--volumes" }
+        Invoke-LabCompose @retryArgs *> $null
+    }
+
+    if (Test-ContainerExists) {
+        throw "The relay container is still running. Restart Docker Desktop, then run .\lab.ps1 down again."
+    }
+}
+
 function Stop-Lab {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker was not found." }
     Use-ContainerDistro
-    Invoke-LabCompose down --remove-orphans
-    if ($LASTEXITCODE -ne 0) { throw "Docker Compose could not stop the lab." }
+    Remove-LabStack
     Write-Host "Linux Server Rescue is down. $(Get-DistroDisplay $script:LabDistro) drill state is preserved; lab reset clears it."
 }
 
@@ -423,8 +442,7 @@ function Reset-Lab {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker was not found." }
     Use-ContainerDistro
     Write-Host "Removing only $(Get-DistroDisplay $script:LabDistro) resources in the $ProjectName Compose project, including its state volume..."
-    Invoke-LabCompose down --volumes --remove-orphans
-    if ($LASTEXITCODE -ne 0) { throw "Docker Compose could not clear the lab." }
+    Remove-LabStack -Volumes
     Clear-ScenarioOverlay
     Start-Lab $script:LabDistro
 }
