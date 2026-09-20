@@ -434,7 +434,7 @@ remove_lab_stack() {
 
   if container_exists; then
     if ! is_lab_relay; then
-      fail "Container ${container_name} exists but is not this lab's relay (missing cloudsprocket.lab=rescue). Not removing it."
+      fail "Container ${container_name} is not this lab's relay (cloudsprocket.lab='$(container_label cloudsprocket.lab)', compose project='$(container_label com.docker.compose.project)'). Not removing it."
     fi
     printf 'The relay container did not stop cleanly. Forcing removal...\n'
     docker rm -f "${container_name}" >/dev/null 2>&1 || true

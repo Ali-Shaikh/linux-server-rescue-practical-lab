@@ -433,7 +433,9 @@ function Remove-LabStack {
 
     if (Test-ContainerExists) {
         if (-not (Test-LabRelayContainer)) {
-            throw "Container $ContainerName exists but is not this lab's relay (missing cloudsprocket.lab=rescue). Not removing it."
+            $lab = [string](& docker container inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' $ContainerName 2>$null)
+            $project = [string](& docker container inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' $ContainerName 2>$null)
+            throw "Container $ContainerName is not this lab's relay (cloudsprocket.lab='$($lab.Trim())', compose project='$($project.Trim())'). Not removing it."
         }
         Write-Host "The relay container did not stop cleanly. Forcing removal..."
         & docker rm -f $ContainerName *> $null
