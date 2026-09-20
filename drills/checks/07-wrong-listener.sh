@@ -33,7 +33,7 @@ fi
 
 network_ready=0
 for _ in {1..20}; do
-  if curl --noproxy '*' --fail --silent --connect-timeout 1 \
+  if curl --noproxy '*' --fail --silent --connect-timeout 1 --max-time 2 \
     "http://${network_address}:8080/health" >/dev/null 2>&1; then
     network_ready=1
     break

@@ -39,3 +39,15 @@ install -o root -g root -m 0644 \
   /etc/rescue-web/config.json.last-known-good
 
 systemctl enable rescue-web.service >/dev/null
+
+if [[ -d /home/rescue ]] \
+  && ! grep -q 'verify is not a command on this server' /home/rescue/.bashrc 2>/dev/null; then
+  cat >> /home/rescue/.bashrc <<'EOF'
+
+verify() {
+  printf 'verify is not a command on this server.\n'
+  printf 'Type exit, then on your laptop run: ./lab verify 01   or   .\\lab.ps1 verify 01\n'
+}
+EOF
+  chown rescue:rescue /home/rescue/.bashrc
+fi

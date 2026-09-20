@@ -18,22 +18,32 @@ Start the incident and enter the host:
 
 PowerShell users can run `.\lab.ps1 break 01` and `.\lab.ps1 shell`.
 
-When the repair is complete, leave the shell and run:
+When the repair is complete, **leave the Linux shell** (`exit`) and run
+verify in the same PowerShell or terminal where you ran `lab up`. There is
+no `./lab` command inside `relay`.
 
 ```bash
 ./lab verify 01
 ```
 
-The verifier checks the outcome only. It does not require a particular editor
-or command sequence.
+PowerShell: `.\lab.ps1 verify 01`.
+
+Inside the host the service listens on port 8080. Port 8100 is only on your
+laptop, mapped to that 8080. The verifier checks the outcome only. It does
+not require a particular editor or command sequence.
 
 ## Hints
 
 <details>
 <summary>Hint 1</summary>
 
-Ask systemd for the current state of `rescue-web.service`. Pay attention to
-the recent exit reason and whether it is restarting.
+Ask systemd for the current state:
+
+```bash
+sudo systemctl status rescue-web.service
+```
+
+Pay attention to the recent exit reason and whether it is restarting.
 
 </details>
 
