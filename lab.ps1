@@ -84,6 +84,19 @@ function Test-ContainerExists {
     return $LASTEXITCODE -eq 0
 }
 
+function Test-LabRelayContainer {
+    if (-not (Test-ContainerExists)) { return $false }
+    $lab = [string](& docker container inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' $ContainerName 2>$null)
+    $project = [string](& docker container inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' $ContainerName 2>$null)
+    return ($lab.Trim() -eq "rescue") -and ($project.Trim() -eq $ProjectName)
+}
+
+function Test-LabStateVolume {
+    $name = "lsr-$script:LabDistro-state"
+    & docker volume inspect $name *> $null
+    return $LASTEXITCODE -eq 0
+}
+
 function Test-ContainerRunning {
     $value = & docker container inspect --format "{{.State.Running}}" $ContainerName 2>$null
     return $LASTEXITCODE -eq 0 -and $value -eq "true"
@@ -419,6 +432,9 @@ function Remove-LabStack {
     Invoke-LabCompose @downArgs *> $null
 
     if (Test-ContainerExists) {
+        if (-not (Test-LabRelayContainer)) {
+            throw "Container $ContainerName exists but is not this lab's relay (missing cloudsprocket.lab=rescue). Not removing it."
+        }
         Write-Host "The relay container did not stop cleanly. Forcing removal..."
         & docker rm -f $ContainerName *> $null
         $retryArgs = @("down", "--remove-orphans", "--timeout", "5")
@@ -428,6 +444,12 @@ function Remove-LabStack {
 
     if (Test-ContainerExists) {
         throw "The relay container is still running. Restart Docker Desktop, then run .\lab.ps1 down again."
+    }
+    if ($Volumes -and (Test-LabStateVolume)) {
+        Invoke-LabCompose down --remove-orphans --timeout 5 --volumes *> $null
+        if (Test-LabStateVolume) {
+            throw "The lab state volume is still present. Restart Docker Desktop, then run .\lab.ps1 reset again."
+        }
     }
 }
 

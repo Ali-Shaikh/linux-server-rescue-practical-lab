@@ -95,6 +95,27 @@ container_distro() {
     "${container_name}" 2>/dev/null || true
 }
 
+container_label() {
+  docker container inspect \
+    --format "{{index .Config.Labels \"$1\"}}" \
+    "${container_name}" 2>/dev/null || true
+}
+
+is_lab_relay() {
+  local lab_label project
+  lab_label="$(container_label cloudsprocket.lab)"
+  project="$(container_label com.docker.compose.project)"
+  [[ "${lab_label}" == "rescue" && "${project}" == "${project_name}" ]]
+}
+
+state_volume_name() {
+  printf 'lsr-%s-state' "${lab_distro}"
+}
+
+lab_state_volume_exists() {
+  docker volume inspect "$(state_volume_name)" >/dev/null 2>&1
+}
+
 adopt_container_distro() {
   local actual
   if container_exists; then
@@ -402,14 +423,19 @@ up() {
 # mount can ignore SIGTERM/SIGKILL; fall back to docker rm -f, then tell the
 # user to restart Docker Desktop if the engine still will not reap the task.
 remove_lab_stack() {
+  local want_volumes=0
   local -a extra=()
   if [[ "${1:-}" == "--volumes" ]]; then
+    want_volumes=1
     extra+=(--volumes)
   fi
 
   compose down --remove-orphans --timeout 8 "${extra[@]}" >/dev/null 2>&1 || true
 
   if container_exists; then
+    if ! is_lab_relay; then
+      fail "Container ${container_name} exists but is not this lab's relay (missing cloudsprocket.lab=rescue). Not removing it."
+    fi
     printf 'The relay container did not stop cleanly. Forcing removal...\n'
     docker rm -f "${container_name}" >/dev/null 2>&1 || true
     compose down --remove-orphans --timeout 5 "${extra[@]}" >/dev/null 2>&1 || true
@@ -417,6 +443,13 @@ remove_lab_stack() {
 
   if container_exists; then
     fail "The relay container is still running. Restart Docker Desktop, then run lab down again."
+  fi
+
+  if (( want_volumes )) && lab_state_volume_exists; then
+    compose down --remove-orphans --timeout 5 --volumes >/dev/null 2>&1 || true
+    if lab_state_volume_exists; then
+      fail "The lab state volume is still present. Restart Docker Desktop, then run lab reset again."
+    fi
   fi
 }
 
